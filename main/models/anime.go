@@ -14,3 +14,8 @@ type Episode struct {
 	Id      string
 	Episode string
 }
+
+type Server struct {
+	Name string
+	Url  string
+}

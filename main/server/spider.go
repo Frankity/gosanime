@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/anaskhan96/soup"
+	"github.com/go-rod/rod"
 	"xyz.frankity/gosanime/main/models"
 )
 
@@ -59,7 +60,6 @@ func ovas() ([]models.Anime, error) {
 	}
 
 	return animes, nil
-
 }
 
 func anime(r *http.Request) (interface{}, error) {
@@ -103,7 +103,63 @@ func anime(r *http.Request) (interface{}, error) {
 	}
 
 	return an, err
+}
 
+func videosByServer(r *http.Request) (interface{}, error) {
+	if err := r.ParseForm(); err != nil {
+		os.Exit(1)
+	}
+	anime := r.Form.Get("anime")
+	episode := r.Form.Get("episode")
+
+	resp, err := soup.Get(fmt.Sprintf("%v/%s/%s/", ROOTURL.url, anime, episode))
+	if err != nil {
+		os.Exit(1)
+	}
+
+	doc := soup.HTMLParse(resp)
+
+	serversNames := doc.Find("div", "class", "bg-servers").FindAll("a")
+
+	urls := []string{}
+	for _, in := range doc.FindAll("script") {
+		if strings.Contains(in.Text(), "var video = [];") {
+			d := in.Children()[0]
+			arr := strings.Split(d.NodeValue, "\n")
+			for i := 0; i < len(arr); i++ {
+				if strings.Contains(arr[i], "player_conte") {
+
+					html := soup.HTMLParse(arr[i])
+					url := html.Find("iframe", "class", "player_conte").Attrs()["src"]
+
+					page := rod.New().MustConnect().MustPage(url)
+
+					videoUrl := page.MustWaitLoad()
+					d := videoUrl.MustElement("video")
+					f := d.MustAttribute("src")
+					if err != nil {
+						os.Exit(1)
+					}
+
+					urls = append(urls, *f)
+					//time.Sleep(time.Second)
+
+				}
+
+			}
+		}
+	}
+
+	servers := []models.Server{}
+	for i := 0; i < len(serversNames); i++ {
+		s := models.Server{
+			Name: serversNames[i].Text(),
+			Url:  urls[i],
+		}
+		servers = append(servers, s)
+	}
+
+	return servers, err
 }
 
 func (a *Server) IndexHandler() http.HandlerFunc {
@@ -126,7 +182,7 @@ func (a *Server) GetTopAnimes() http.HandlerFunc {
 			resp[ifx] = mapToJson(&anime)
 		}
 
-		sendResponse(w, r, makeResponse(resp), http.StatusOK)
+		sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
 	}
 }
 
@@ -144,31 +200,68 @@ func (a *Server) GetOvas() http.HandlerFunc {
 			resp[ifx] = mapToJson(&anime)
 		}
 
-		sendResponse(w, r, makeResponse(resp), http.StatusOK)
+		sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
 	}
 }
 
 func (a *Server) GetAnime() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		animes, err := anime(r)
+		println(r.RequestURI)
+
+		anime, err := anime(r)
 		if err != nil {
 			log.Printf("cant get latest animes err=%v \n", err)
 			sendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}
 
-		sendResponse(w, r, animes, http.StatusOK)
+		var response = Response{
+			Data:    anime,
+			Status:  "200",
+			Message: "Success",
+		}
+
+		sendResponse(w, r, response, http.StatusOK)
 	}
 }
 
-type Response struct {
+func (a *Server) GetVideoServers() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		print(r.RequestURI)
+
+		episodes, err := videosByServer(r)
+
+		if err != nil {
+			log.Printf("cant get latest animes err=%v \n", err)
+			sendResponse(w, r, nil, http.StatusInternalServerError)
+			return
+		}
+
+		var response = Response{
+			Data:    episodes,
+			Status:  "200",
+			Message: "Success",
+		}
+
+		sendResponse(w, r, response, http.StatusOK)
+
+	}
+}
+
+type ArrayResponse struct {
 	Data    []models.Anime
 	Status  string
 	Message string
 }
 
-func makeResponse(animes []models.Anime) interface{} {
-	return Response{
+type Response struct {
+	Data    interface{}
+	Status  string
+	Message string
+}
+
+func makeArrayResponse(animes []models.Anime) interface{} {
+	return ArrayResponse{
 		Data:    animes,
 		Status:  "200",
 		Message: "Success",
