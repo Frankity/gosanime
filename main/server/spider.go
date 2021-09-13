@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/anaskhan96/soup"
-	"github.com/go-rod/rod"
 	"xyz.frankity/gosanime/main/models"
 )
 
@@ -119,8 +119,6 @@ func videosByServer(r *http.Request) (interface{}, error) {
 
 	doc := soup.HTMLParse(resp)
 
-	serversNames := doc.Find("div", "class", "bg-servers").FindAll("a")
-
 	urls := []string{}
 	for _, in := range doc.FindAll("script") {
 		if strings.Contains(in.Text(), "var video = [];") {
@@ -130,30 +128,63 @@ func videosByServer(r *http.Request) (interface{}, error) {
 				if strings.Contains(arr[i], "player_conte") {
 
 					html := soup.HTMLParse(arr[i])
-					url := html.Find("iframe", "class", "player_conte").Attrs()["src"]
+					urli := html.Find("iframe", "class", "player_conte").Attrs()["src"]
 
-					page := rod.New().MustConnect().MustPage(url)
+					if strings.Contains(urli, "jk.php") {
+						ur := strings.Replace(urli, "jk.php?u=", "", -1)
+						urls = append(urls, ur)
+						break
+					}
 
-					videoUrl := page.MustWaitLoad()
-					d := videoUrl.MustElement("video")
-					f := d.MustAttribute("src")
+					doc, err := soup.Get(urli)
+
 					if err != nil {
 						os.Exit(1)
 					}
 
-					urls = append(urls, *f)
-					//time.Sleep(time.Second)
+					datas := soup.HTMLParse(doc)
 
+					if strings.Contains(datas.HTML(), "input") {
+
+						redirUrl := datas.FindAll("input")[0].Attrs()["value"]
+
+						data := url.Values{}
+						data.Set("data", redirUrl)
+
+						client := &http.Client{}
+						r, err := http.NewRequest("POST", "https://jkanime.net/gsplay/redirect_post.php", strings.NewReader(data.Encode())) // URL-encoded payload
+						if err != nil {
+							log.Fatal(err)
+						}
+						r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+						r.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+
+						res, err := client.Do(r)
+						if err != nil {
+							log.Fatal(err)
+						}
+
+						defer res.Body.Close()
+						print()
+
+						if err != nil {
+							log.Fatal(err)
+						}
+
+						vUrl := strings.Split(string(fmt.Sprint(res.Request)), " ")[1]
+
+						urls = append(urls, *&vUrl)
+
+					}
 				}
-
 			}
 		}
 	}
 
 	servers := []models.Server{}
-	for i := 0; i < len(serversNames); i++ {
+	for i := 0; i < len(urls); i++ {
 		s := models.Server{
-			Name: serversNames[i].Text(),
+			Name: fmt.Sprintf("Servidor %v", i+1),
 			Url:  urls[i],
 		}
 		servers = append(servers, s)
