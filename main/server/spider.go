@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -132,7 +134,7 @@ func videosByServer(r *http.Request) (interface{}, error) {
 
 					if strings.Contains(urli, "jk.php") {
 						ur := strings.Replace(urli, "jk.php?u=", "", -1)
-						urls = append(urls, ur)
+						urls = append(urls, getHiddenUrl(ur))
 						break
 					}
 
@@ -165,7 +167,6 @@ func videosByServer(r *http.Request) (interface{}, error) {
 						}
 
 						defer res.Body.Close()
-						print()
 
 						if err != nil {
 							log.Fatal(err)
@@ -173,8 +174,39 @@ func videosByServer(r *http.Request) (interface{}, error) {
 
 						vUrl := strings.Split(string(fmt.Sprint(res.Request)), " ")[1]
 
-						urls = append(urls, *&vUrl)
+						if strings.Contains(vUrl, "#") {
+							hash := strings.Split(vUrl, "#")
 
+							d := url.Values{}
+							d.Set("v", hash[1])
+
+							p, err := http.PostForm("https://jkanime.net/gsplay/api.php", url.Values{"v": {hash[1]}})
+							if err != nil {
+								log.Fatal(err)
+							}
+
+							r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+							r.Header.Add("Content-Length", strconv.Itoa(len(d.Encode())))
+
+							if nil != err {
+								fmt.Println("error in action happened getting the response", err)
+							}
+
+							defer p.Body.Close()
+							body, err := ioutil.ReadAll(p.Body)
+
+							if nil != err {
+								fmt.Println("error in acion happened reading the body", err)
+							}
+
+							var url Url
+							_ = json.Unmarshal([]byte(body), &url)
+
+							urls = append(urls, url.File)
+
+						} else {
+							urls = append(urls, *&vUrl)
+						}
 					}
 				}
 			}
@@ -277,6 +309,19 @@ func (a *Server) GetVideoServers() http.HandlerFunc {
 		sendResponse(w, r, response, http.StatusOK)
 
 	}
+}
+
+func getHiddenUrl(url string) string {
+	resp, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	return fmt.Sprint(resp.Request.URL)
+}
+
+type Url struct {
+	File string
 }
 
 type ArrayResponse struct {
