@@ -14,7 +14,6 @@ func main() {
 
 	http.HandleFunc("/", app.Router.ServeHTTP)
 
-	os.Setenv("PORT", "9000")
 	log.Println("App running..")
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", os.Getenv("PORT")), nil))
 
