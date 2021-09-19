@@ -12,9 +12,9 @@ func main() {
 	app := server.New()
 
 	http.HandleFunc("/", app.Router.ServeHTTP)
-
+	port := ":" + os.Getenv("PORT")
 	log.Println("App running..")
-	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), nil))
+	log.Fatal(http.ListenAndServe(port, nil))
 
 }
 
