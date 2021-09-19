@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +14,7 @@ func main() {
 	http.HandleFunc("/", app.Router.ServeHTTP)
 
 	log.Println("App running..")
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", os.Getenv("PORT")), nil))
+	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), nil))
 
 }
 
