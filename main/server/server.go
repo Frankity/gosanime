@@ -23,5 +23,5 @@ func (a *Server) initRoutes() {
 	a.Router.HandleFunc("/api/v1/ovas", a.GetOvas()).Methods("GET")
 	a.Router.HandleFunc("/api/v1/anime", a.GetAnime()).Methods("GET")
 	a.Router.HandleFunc("/api/v1/video", a.GetVideoServers()).Methods("GET")
-
+	a.Router.HandleFunc("/api/v1/search", a.GetSearchAnime()).Methods("GET")
 }

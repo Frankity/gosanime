@@ -225,6 +225,58 @@ func videosByServer(r *http.Request) (interface{}, error) {
 	return servers, err
 }
 
+func searchAnime(r *http.Request) (interface{}, error) {
+	if err := r.ParseForm(); err != nil {
+		os.Exit(1)
+	}
+	anime := r.Form.Get("anime")
+	page := r.Form.Get("page")
+
+	url := fmt.Sprintf("%v/buscar/%s/%s/", ROOTURL.url, strings.Replace(anime, "-", "_", -1), page)
+
+	resp, err := soup.Get(url)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	doc := soup.HTMLParse(resp)
+
+	elements := doc.FindAll("div", "class", "anime__item")
+
+	animes := []models.Anime{}
+
+	for _, p := range elements {
+		anime := models.Anime{
+			ID:     strings.Split(p.Find("h5").Find("a").Attrs()["href"], "/")[3],
+			Name:   p.Find("h5").Find("a").Text(),
+			Poster: p.Find("a").Find("div", "class", "anime__item__pic").Attrs()["data-setbg"],
+			State:  p.Find("div", "class", "anime__item__text").Find("ul").FindAll("li")[0].Text(),
+			Type:   strings.TrimSpace(p.Find("div", "class", "anime__item__text").Find("ul").FindAll("li")[1].Text()),
+		}
+		animes = append(animes, anime)
+	}
+
+	pg, err := strconv.Atoi(page)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	if len(elements) == 12 {
+		pg = pg + 1
+	} else {
+		pg = -1
+	}
+
+	ar := models.SearchAnimeResponse{
+		Data:    animes,
+		Status:  "200",
+		Message: "Success",
+		Page:    pg,
+	}
+
+	return ar, err
+}
+
 func (a *Server) IndexHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Gosanime Api Running")
@@ -278,7 +330,7 @@ func (a *Server) GetAnime() http.HandlerFunc {
 			return
 		}
 
-		var response = Response{
+		var response = models.Response{
 			Data:    anime,
 			Status:  "200",
 			Message: "Success",
@@ -300,7 +352,7 @@ func (a *Server) GetVideoServers() http.HandlerFunc {
 			return
 		}
 
-		var response = Response{
+		var response = models.Response{
 			Data:    episodes,
 			Status:  "200",
 			Message: "Success",
@@ -308,6 +360,21 @@ func (a *Server) GetVideoServers() http.HandlerFunc {
 
 		sendResponse(w, r, response, http.StatusOK)
 
+	}
+}
+
+func (a *Server) GetSearchAnime() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		print(r.RequestURI)
+
+		animes, err := searchAnime(r)
+		if err != nil {
+			log.Printf("cant get latest animes err=%v \n", err)
+			sendResponse(w, r, nil, http.StatusInternalServerError)
+			return
+		}
+
+		sendResponse(w, r, animes, http.StatusOK)
 	}
 }
 
@@ -324,20 +391,8 @@ type Url struct {
 	File string
 }
 
-type ArrayResponse struct {
-	Data    []models.Anime
-	Status  string
-	Message string
-}
-
-type Response struct {
-	Data    interface{}
-	Status  string
-	Message string
-}
-
 func makeArrayResponse(animes []models.Anime) interface{} {
-	return ArrayResponse{
+	return models.ArrayResponse{
 		Data:    animes,
 		Status:  "200",
 		Message: "Success",
