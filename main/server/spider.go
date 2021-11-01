@@ -290,17 +290,11 @@ func (a *Server) IndexHandler() http.HandlerFunc {
 
 func (a *Server) GetTopAnimes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		animes, err := lastAnimes()
 
 		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
-			notBearer := Bearer{
-				Message: "Bearer token not present",
-				Status:  "Unauthorized",
-				Code:    401,
-			}
-
-			sendResponse(w, r, notBearer, http.StatusUnauthorized)
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
 		} else {
+			animes, err := lastAnimes()
 
 			if err != nil {
 				log.Printf("cant get latest animes err=%v \n", err)
@@ -320,83 +314,94 @@ func (a *Server) GetTopAnimes() http.HandlerFunc {
 
 func (a *Server) GetOvas() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		animes, err := ovas()
-		if err != nil {
-			log.Printf("cant get latest animes err=%v \n", err)
-			sendResponse(w, r, nil, http.StatusInternalServerError)
-			return
-		}
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
+		} else {
+			animes, err := ovas()
+			if err != nil {
+				log.Printf("cant get latest animes err=%v \n", err)
+				sendResponse(w, r, nil, http.StatusInternalServerError)
+				return
+			}
 
-		var resp = make([]models.Anime, len(animes))
-		for ifx, anime := range animes {
-			resp[ifx] = mapToJson(&anime)
-		}
+			var resp = make([]models.Anime, len(animes))
+			for ifx, anime := range animes {
+				resp[ifx] = mapToJson(&anime)
+			}
 
-		sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
+			sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
+		}
 	}
 }
 
 func (a *Server) GetAnime() http.HandlerFunc {
+
 	return func(w http.ResponseWriter, r *http.Request) {
-		println(r.RequestURI)
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
+		} else {
+			anime, err := anime(r)
+			if err != nil {
+				log.Printf("cant get latest animes err=%v \n", err)
+				sendResponse(w, r, nil, http.StatusInternalServerError)
+				return
+			}
 
-		anime, err := anime(r)
-		if err != nil {
-			log.Printf("cant get latest animes err=%v \n", err)
-			sendResponse(w, r, nil, http.StatusInternalServerError)
-			return
+			var response = models.Response{
+				Data:    anime,
+				Status:  "200",
+				Message: "Success",
+			}
+
+			sendResponse(w, r, response, http.StatusOK)
 		}
-
-		var response = models.Response{
-			Data:    anime,
-			Status:  "200",
-			Message: "Success",
-		}
-
-		sendResponse(w, r, response, http.StatusOK)
 	}
 }
 
 func (a *Server) GetVideoServers() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		print(r.RequestURI)
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
+		} else {
+			episodes, err := videosByServer(r)
 
-		episodes, err := videosByServer(r)
+			if err != nil {
+				log.Printf("cant get latest animes err=%v \n", err)
+				sendResponse(w, r, nil, http.StatusInternalServerError)
+				return
+			}
 
-		if err != nil {
-			log.Printf("cant get latest animes err=%v \n", err)
-			sendResponse(w, r, nil, http.StatusInternalServerError)
-			return
+			var response = models.Response{
+				Data:    episodes,
+				Status:  "200",
+				Message: "Success",
+			}
+
+			sendResponse(w, r, response, http.StatusOK)
+
 		}
-
-		var response = models.Response{
-			Data:    episodes,
-			Status:  "200",
-			Message: "Success",
-		}
-
-		sendResponse(w, r, response, http.StatusOK)
-
 	}
 }
 
 func (a *Server) GetSearchAnime() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r.RequestURI)
-
-		animes, err := searchAnime(r)
-
-		errorResponse := models.SearchAnimeResponse{
-			Data:    nil,
-			Status:  "401",
-			Message: "Not Found",
-			Page:    -1,
-		}
-
-		if err != nil {
-			sendResponse(w, r, errorResponse, http.StatusNotFound)
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
 		} else {
-			sendResponse(w, r, animes, http.StatusOK)
+			animes, err := searchAnime(r)
+
+			errorResponse := models.SearchAnimeResponse{
+				Data:    nil,
+				Status:  "401",
+				Message: "Not Found",
+				Page:    -1,
+			}
+
+			if err != nil {
+				sendResponse(w, r, errorResponse, http.StatusNotFound)
+			} else {
+				sendResponse(w, r, animes, http.StatusOK)
+			}
 		}
 	}
 }
@@ -425,5 +430,13 @@ func makeArrayResponse(animes []models.Anime) interface{} {
 		Data:    animes,
 		Status:  "200",
 		Message: "Success",
+	}
+}
+
+func getNoBearer() interface{} {
+	return Bearer{
+		Message: "Bearer token not present",
+		Status:  "Unauthorized",
+		Code:    401,
 	}
 }
