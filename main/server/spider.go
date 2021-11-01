@@ -15,6 +15,8 @@ import (
 	"xyz.frankity/gosanime/main/models"
 )
 
+var bearer string
+
 func lastAnimes() ([]models.Anime, error) {
 	animes := []models.Anime{}
 	resp, err := soup.Get(ROOTURL.url)
@@ -265,8 +267,6 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	if len(elements) == 12 {
 		pg = pg + 1
-	} else {
-		pg = -1
 	}
 
 	ar := models.SearchAnimeResponse{
@@ -280,6 +280,9 @@ func searchAnime(r *http.Request) (interface{}, error) {
 }
 
 func (a *Server) IndexHandler() http.HandlerFunc {
+	bearer = Config().Bearer
+	fmt.Println(bearer)
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Gosanime Api Running")
 	}
@@ -288,18 +291,30 @@ func (a *Server) IndexHandler() http.HandlerFunc {
 func (a *Server) GetTopAnimes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		animes, err := lastAnimes()
-		if err != nil {
-			log.Printf("cant get latest animes err=%v \n", err)
-			sendResponse(w, r, nil, http.StatusInternalServerError)
-			return
-		}
 
-		var resp = make([]models.Anime, len(animes))
-		for ifx, anime := range animes {
-			resp[ifx] = mapToJson(&anime)
-		}
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			notBearer := Bearer{
+				Message: "Bearer token not present",
+				Status:  "Unauthorized",
+				Code:    401,
+			}
 
-		sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
+			sendResponse(w, r, notBearer, http.StatusUnauthorized)
+		} else {
+
+			if err != nil {
+				log.Printf("cant get latest animes err=%v \n", err)
+				sendResponse(w, r, nil, http.StatusInternalServerError)
+				return
+			}
+
+			var resp = make([]models.Anime, len(animes))
+			for ifx, anime := range animes {
+				resp[ifx] = mapToJson(&anime)
+			}
+
+			sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
+		}
 	}
 }
 
@@ -397,6 +412,12 @@ func getHiddenUrl(url string) string {
 
 type Url struct {
 	File string
+}
+
+type Bearer struct {
+	Message string `json:"message"`
+	Status  string `json:"status"`
+	Code    int    `json:"code"`
 }
 
 func makeArrayResponse(animes []models.Anime) interface{} {

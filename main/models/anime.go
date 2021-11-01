@@ -1,7 +1,7 @@
 package models
 
 type Anime struct {
-	ID       string    `json:"ID"`
+	ID       string    `json:"id"`
 	Name     string    `json:"name"`
 	Poster   string    `json:"poster"`
 	Type     string    `json:"type"`
@@ -11,11 +11,11 @@ type Anime struct {
 }
 
 type Episode struct {
-	Id      string
-	Episode string
+	Id      string `json:"id"`
+	Episode string `json:"episode"`
 }
 
 type Server struct {
-	Name string
-	Url  string
+	Name string `json:"name"`
+	Url  string `json:"url"`
 }
