@@ -227,6 +227,7 @@ func videosByServer(r *http.Request) (interface{}, error) {
 
 func searchAnime(r *http.Request) (interface{}, error) {
 	if err := r.ParseForm(); err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
 	anime := r.Form.Get("anime")
@@ -236,7 +237,8 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	resp, err := soup.Get(url)
 	if err != nil {
-		os.Exit(1)
+		fmt.Println(err)
+		return err, err
 	}
 
 	doc := soup.HTMLParse(resp)
@@ -258,7 +260,7 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	pg, err := strconv.Atoi(page)
 	if err != nil {
-		os.Exit(1)
+		print(fmt.Sprintf("%v %s", err, "<- Error"))
 	}
 
 	if len(elements) == 12 {
@@ -365,16 +367,22 @@ func (a *Server) GetVideoServers() http.HandlerFunc {
 
 func (a *Server) GetSearchAnime() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		print(r.RequestURI)
+		fmt.Println(r.RequestURI)
 
 		animes, err := searchAnime(r)
-		if err != nil {
-			log.Printf("cant get latest animes err=%v \n", err)
-			sendResponse(w, r, nil, http.StatusInternalServerError)
-			return
+
+		errorResponse := models.SearchAnimeResponse{
+			Data:    nil,
+			Status:  "401",
+			Message: "Not Found",
+			Page:    -1,
 		}
 
-		sendResponse(w, r, animes, http.StatusOK)
+		if err != nil {
+			sendResponse(w, r, errorResponse, http.StatusNotFound)
+		} else {
+			sendResponse(w, r, animes, http.StatusOK)
+		}
 	}
 }
 
