@@ -19,3 +19,8 @@ type Server struct {
 	Name string `json:"name"`
 	Url  string `json:"url"`
 }
+
+type Slug struct {
+	Name   string  `json:"name"`
+	Animes []Anime `json:"animes"`
+}

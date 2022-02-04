@@ -17,7 +17,7 @@ import (
 
 var bearer string
 
-func lastAnimes() ([]models.Anime, error) {
+func main() ([]models.Anime, error) {
 	animes := []models.Anime{}
 	resp, err := soup.Get(ROOTURL.url)
 	if err != nil {
@@ -288,13 +288,15 @@ func (a *Server) IndexHandler() http.HandlerFunc {
 	}
 }
 
-func (a *Server) GetTopAnimes() http.HandlerFunc {
+func (a *Server) GetMain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
 			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
 		} else {
-			animes, err := lastAnimes()
+
+			animes, err := main()
+			ovas, err := ovas()
 
 			if err != nil {
 				log.Printf("cant get latest animes err=%v \n", err)
@@ -302,12 +304,25 @@ func (a *Server) GetTopAnimes() http.HandlerFunc {
 				return
 			}
 
-			var resp = make([]models.Anime, len(animes))
+			var animeResp = make([]models.Anime, len(animes))
 			for ifx, anime := range animes {
-				resp[ifx] = mapToJson(&anime)
+				animeResp[ifx] = mapToJson(&anime)
 			}
 
-			sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
+			var ovasResp = make([]models.Anime, len(animes))
+			for ifx, anime := range ovas {
+				animeResp[ifx] = mapToJson(&anime)
+			}
+
+			p := []models.SlugResponse{}
+
+			var ar = makeSlugArrayResponse(animeResp, "Latest Animes")
+			var or = makeSlugArrayResponse(ovasResp, "Ovas")
+
+			p = append(p, ar)
+			p = append(p, or)
+
+			sendResponse(w, r, makeSlugMainResponse(p), http.StatusOK)
 		}
 	}
 }
@@ -433,6 +448,21 @@ func makeArrayResponse(animes []models.Anime) interface{} {
 	}
 }
 
+func makeSlugMainResponse(slugs []models.SlugResponse) models.SlugMainResponse {
+	return models.SlugMainResponse{
+		Data:    slugs,
+		Status:  "200",
+		Message: "Success",
+	}
+}
+
+func makeSlugArrayResponse(animes []models.Anime, name string) models.SlugResponse {
+	return models.SlugResponse{
+		Data: animes,
+		Name: name,
+	}
+}
+
 func getNoBearer() interface{} {
 	return Bearer{
 		Message: "Bearer token not present",
@@ -440,3 +470,17 @@ func getNoBearer() interface{} {
 		Code:    401,
 	}
 }
+
+/*
+
+data : [
+	animes
+]
+
+
+
+
+
+
+
+*/

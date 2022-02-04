@@ -18,3 +18,14 @@ type Response struct {
 	Status  string      `json:"status"`
 	Message string      `json:"message"`
 }
+
+type SlugResponse struct {
+	Data interface{} `json:"animes"`
+	Name string      `json:"name"`
+}
+
+type SlugMainResponse struct {
+	Data    []SlugResponse `json:"data"`
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+}
