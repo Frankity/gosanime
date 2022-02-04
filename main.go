@@ -12,7 +12,7 @@ func main() {
 	app := server.New()
 
 	http.HandleFunc("/", app.Router.ServeHTTP)
-	port := ":" + os.Getenv("PORT")
+	port := ":3000" //+ os.Getenv("PORT")
 	log.Println("App running..")
 	log.Fatal(http.ListenAndServe(port, nil))
 

@@ -311,7 +311,7 @@ func (a *Server) GetMain() http.HandlerFunc {
 
 			var ovasResp = make([]models.Anime, len(animes))
 			for ifx, anime := range ovas {
-				animeResp[ifx] = mapToJson(&anime)
+				ovasResp[ifx] = mapToJson(&anime)
 			}
 
 			p := []models.SlugResponse{}
