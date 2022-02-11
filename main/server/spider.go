@@ -267,6 +267,8 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	if len(elements) == 12 {
 		pg = pg + 1
+	} else {
+		pg = -1
 	}
 
 	ar := models.SearchAnimeResponse{
