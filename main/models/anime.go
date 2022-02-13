@@ -7,6 +7,7 @@ type Anime struct {
 	Type     string    `json:"type"`
 	Synopsis string    `json:"synopsis"`
 	State    string    `json:"state"`
+	Genre    []string  `json:"genre"`
 	Episodes []Episode `json:"episodes"`
 }
 

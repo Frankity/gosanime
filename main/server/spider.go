@@ -121,12 +121,23 @@ func anime(r *http.Request) (interface{}, error) {
 		eplist = append(eplist, ep)
 	}
 
+	genres := doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[1].FindAll("a")
+
+	result := []string{}
+
+	for a := range genres {
+		result = append(result, strings.ToLower(genres[a].Text()))
+	}
+
+	strings.Join(result, ",")
+
 	an := models.Anime{
 		ID:       x,
 		Name:     doc.Find("div", "class", "anime__details__content").Find("h3").Text(),
 		Poster:   doc.Find("div", "class", "anime__details__pic").Attrs()["data-setbg"],
 		Type:     strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[0].Text()),
 		Synopsis: doc.Find("div", "class", "anime__details__content").Find("p").Text(),
+		Genre:    result,
 		State:    strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[6].Find("span", "class", "enemision").Text()),
 		Episodes: eplist,
 	}
