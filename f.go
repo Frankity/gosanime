@@ -8,7 +8,7 @@ import (
 	"github.com/anaskhan96/soup"
 )
 
-func main() {
+func maain() {
 	name := "https://jkanime.net/chobits/"
 
 	resp, err := soup.Get(name)
