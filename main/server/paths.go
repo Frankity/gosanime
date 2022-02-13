@@ -15,3 +15,7 @@ var OVASURL = Paths{
 var TOPURL = Paths{
 	url: "/top/",
 }
+
+var GENRE = Paths{
+	url: "/genero",
+}

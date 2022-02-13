@@ -41,6 +41,58 @@ func main() ([]models.Anime, error) {
 	return animes, nil
 }
 
+func tags(r *http.Request) (interface{}, error) {
+
+	if err := r.ParseForm(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	animes := []models.Anime{}
+	tag := r.Form.Get("tag")
+	page := r.Form.Get("page")
+
+	resp, err := soup.Get(fmt.Sprintf("%v%s/%s/%s", ROOTURL.url, GENRE.url, tag, page))
+	if err != nil {
+		os.Exit(1)
+	}
+
+	doc := soup.HTMLParse(resp)
+
+	main := doc.FindAll("div", "class", "anime__item")
+
+	for _, p := range main {
+		anime := models.Anime{
+			ID:     strings.Split(p.Find("h5").Find("a").Attrs()["href"], "/")[3],
+			Name:   p.Find("h5").Find("a").Text(),
+			Poster: p.Find("a").Find("div", "class", "anime__item__pic").Attrs()["data-setbg"],
+			State:  p.Find("div", "class", "anime__item__text").Find("ul").FindAll("li")[0].Text(),
+			Type:   strings.TrimSpace(p.Find("div", "class", "anime__item__text").Find("ul").FindAll("li")[1].Text()),
+		}
+		animes = append(animes, anime)
+	}
+
+	pg, err := strconv.Atoi(page)
+	if err != nil {
+		print(fmt.Sprintf("%v %s", err, "<- Error"))
+	}
+
+	if len(main) == 24 {
+		pg = pg + 1
+	} else {
+		pg = -1
+	}
+
+	ar := models.SearchAnimeResponse{
+		Data:    animes,
+		Status:  "200",
+		Message: "Success",
+		Page:    pg,
+	}
+
+	return ar, err
+}
+
 func ovas() ([]models.Anime, error) {
 	animes := []models.Anime{}
 	resp, err := soup.Get(fmt.Sprintf("%v%s", ROOTURL.url, OVASURL.url))
@@ -391,6 +443,29 @@ func (a *Server) GetOvas() http.HandlerFunc {
 			}
 
 			sendResponse(w, r, makeArrayResponse(resp), http.StatusOK)
+		}
+	}
+}
+
+func (a *Server) GetTag() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
+		} else {
+			animes, err := tags(r)
+
+			errorResponse := models.SearchAnimeResponse{
+				Data:    nil,
+				Status:  "401",
+				Message: "Not Found",
+				Page:    -1,
+			}
+
+			if err != nil {
+				sendResponse(w, r, errorResponse, http.StatusNotFound)
+			} else {
+				sendResponse(w, r, animes, http.StatusOK)
+			}
 		}
 	}
 }
