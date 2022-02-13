@@ -11,3 +11,7 @@ var ROOTURL = Paths{
 var OVASURL = Paths{
 	url: "/tipo/ova",
 }
+
+var TOPURL = Paths{
+	url: "/top/",
+}

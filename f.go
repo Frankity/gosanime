@@ -2,17 +2,31 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"os"
+	"strings"
+
+	"github.com/anaskhan96/soup"
 )
 
-func masin() {
-	name := "https://jkanime.net/stream/jkmedia/1ad82f40afcedec7a5d6c873986e7c15/a28e5f284a491ba9f012bd30c66f58ee/1/a3c36c9b6023d7318403b2f6da7c013e/"
+func maicn() {
+	name := "https://jkanime.net/top/"
 
-	resp, err := http.Get(name)
+	resp, err := soup.Get(name)
 	if err != nil {
-		panic(err)
+		os.Exit(1)
 	}
-	defer resp.Body.Close()
-	fmt.Println(resp.Request.URL)
+
+	doc := soup.HTMLParse(resp)
+	main := doc.Find("section", "class", "contenido").Find("div", "class", "container").Find("div", "class", "row").Find("div", "class", "col-lg-12").FindAll("div", "class", "list")
+	for _, p := range main {
+		parent := p.Find("div", "id", "conb")
+		fmt.Println(strings.Split(parent.Find("a").Attrs()["href"], "/")[3])
+		fmt.Println(parent.Find("a").Attrs()["title"])
+		fmt.Println(p.Find("a").Find("img").Attrs()["src"])
+		fmt.Println(strings.TrimSpace(p.Find("div", "id", "animinfo").Find("h2", "class", "portada-title").Text()))
+		fmt.Println(strings.TrimSpace(strings.Split(p.Find("div", "id", "animinfo").Find("span", "class", "title").Text(), "/")[0]))
+
+	}
+	// animes, nil
 
 }

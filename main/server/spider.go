@@ -66,6 +66,31 @@ func ovas() ([]models.Anime, error) {
 	return animes, nil
 }
 
+func top() ([]models.Anime, error) {
+	animes := []models.Anime{}
+	resp, err := soup.Get(fmt.Sprintf("%v%s", ROOTURL.url, TOPURL.url))
+	if err != nil {
+		os.Exit(1)
+	}
+
+	doc := soup.HTMLParse(resp)
+	main := doc.Find("section", "class", "contenido").Find("div", "class", "container").Find("div", "class", "row").Find("div", "class", "col-lg-12").FindAll("div", "class", "list")
+
+	for _, p := range main {
+		parent := p.Find("div", "id", "conb")
+		anime := models.Anime{
+			ID:       strings.Split(parent.Find("a").Attrs()["href"], "/")[3],
+			Name:     parent.Find("a").Attrs()["title"],
+			Poster:   p.Find("a").Find("img").Attrs()["src"],
+			Synopsis: strings.TrimSpace(strings.Split(p.Find("div", "id", "animinfo").Find("span", "class", "title").Text(), "/")[1]),
+			State:    strings.TrimSpace(p.Find("div", "id", "animinfo").Find("h2", "class", "portada-title").Text()),
+			Type:     strings.TrimSpace(strings.Split(p.Find("div", "id", "animinfo").Find("span", "class", "title").Text(), "/")[0]),
+		}
+		animes = append(animes, anime)
+	}
+	return animes, nil
+}
+
 func anime(r *http.Request) (interface{}, error) {
 
 	if err := r.ParseForm(); err != nil {
@@ -299,6 +324,7 @@ func (a *Server) GetMain() http.HandlerFunc {
 
 			animes, err := main()
 			ovas, err := ovas()
+			topAnimes, err := top()
 
 			if err != nil {
 				log.Printf("cant get latest animes err=%v \n", err)
@@ -316,11 +342,18 @@ func (a *Server) GetMain() http.HandlerFunc {
 				ovasResp[ifx] = mapToJson(&ova)
 			}
 
+			var topResp = make([]models.Anime, len(topAnimes))
+			for tp, anime := range topAnimes {
+				topResp[tp] = mapToJson(&anime)
+			}
+
 			p := []models.SlugResponse{}
 
-			var ar = makeSlugArrayResponse(animeResp, "Latest Animes")
+			var ur = makeSlugArrayResponse(topResp, "Top Animes")
+			var ar = makeSlugArrayResponse(animeResp, "Ultimos Agregados")
 			var or = makeSlugArrayResponse(ovasResp, "Ovas")
 
+			p = append(p, ur)
 			p = append(p, ar)
 			p = append(p, or)
 
