@@ -14,8 +14,8 @@ func main() {
 	//server.SqlInit()
 
 	http.HandleFunc("/", app.Router.ServeHTTP)
-	port := ":8000" // + os.Getenv("PORT")
-	log.Println("App running...")
+	port := ":" + os.Getenv("PORT")
+	log.Println("App running again...")
 	log.Fatal(http.ListenAndServe(port, nil))
 
 }
