@@ -190,7 +190,7 @@ func anime(r *http.Request) (interface{}, error) {
 		Type:     strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[0].Text()),
 		Synopsis: doc.Find("div", "class", "anime__details__content").Find("p").Text(),
 		Genre:    result,
-		State:    strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[6].Find("span", "class", "enemision").Text()),
+		State:    "", //strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[6].Find("span", "class", "enemision").Text()),
 		Episodes: eplist,
 	}
 
