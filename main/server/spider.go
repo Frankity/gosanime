@@ -447,6 +447,16 @@ func (a *Server) GetOvas() http.HandlerFunc {
 	}
 }
 
+func (a *Server) StoreUser() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
+			sendResponse(w, r, getNoBearer, http.StatusUnauthorized)
+		} else {
+
+		}
+	}
+}
+
 func (a *Server) GetTag() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
