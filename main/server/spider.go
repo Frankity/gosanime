@@ -203,6 +203,7 @@ func videosByServer(r *http.Request) (interface{}, error) {
 	}
 	anime := r.Form.Get("anime")
 	episode := r.Form.Get("episode")
+
 	resp, err := soup.Get(fmt.Sprintf("%v/%s/%s/", ROOTURL.url, anime, episode))
 	if err != nil {
 		os.Exit(1)
@@ -221,115 +222,85 @@ func videosByServer(r *http.Request) (interface{}, error) {
 					html := soup.HTMLParse(arr[i])
 					urli := html.Find("iframe", "class", "player_conte").Attrs()["src"]
 
-					if strings.Contains(urli, "jkvmixdrop.php") {
-						doc, err := soup.Get(urli)
+					if strings.Contains(urli, "jk.php") {
+						ur := strings.Replace(urli, "/jk.php?u=", "https://jkanime.net/", -1)
+						urls = append(urls, getHiddenUrl(ur))
+						break
+					}
 
+					doc, err := soup.Get(urli)
+
+					if err != nil {
+						fmt.Print(err)
+					}
+
+					datas := soup.HTMLParse(doc)
+
+					if strings.Contains(datas.HTML(), "input") {
+
+						redirUrl := datas.FindAll("input")[0].Attrs()["value"]
+
+						data := url.Values{}
+						data.Set("data", redirUrl)
+
+						client := &http.Client{}
+						r, err := http.NewRequest("POST", "https://jkanime.net/gsplay/redirect_post.php", strings.NewReader(data.Encode())) // URL-encoded payload
 						if err != nil {
-							os.Exit(1)
+							log.Fatal(err)
+						}
+						r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+						r.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+
+						res, err := client.Do(r)
+						if err != nil {
+							log.Fatal(err)
 						}
 
-						datas := soup.HTMLParse(doc)
-
-						urlfinal := datas.Find("iframe").Attrs()["src"]
-
-						ol, err := soup.Get(fmt.Sprintf("https:%s", urlfinal))
+						defer res.Body.Close()
 
 						if err != nil {
 							log.Fatal(err)
 						}
 
-						parsed := soup.HTMLParse(ol)
-						parts := []string{}
+						vUrl := strings.Split(string(fmt.Sprint(res.Request)), " ")[1]
 
-						for _, in := range parsed.FindAll("script") {
+						if strings.Contains(vUrl, "#") {
+							hash := strings.Split(vUrl, "#")
 
-							if strings.Contains(in.Text(), "delivery") {
-								parts = strings.Split(strings.Split(in.Text(), "delivery")[1], "|")
-							}
+							d := url.Values{}
+							d.Set("v", hash[1])
 
-						}
-
-						urld := fmt.Sprintf("https://s-delivery45.mxdcontent.net/v/%s.mp4?s=%s&e=%s&_t=%s", parts[1], parts[6], parts[14], parts[15])
-
-						urls = append(urls, *&urld)
-
-					} else if strings.Contains(urli, "jk.php") {
-						urli := strings.Replace(urli, "jk.php?u=", "", -1)
-
-						doc, err := soup.Get(urli)
-
-						if err != nil {
-							os.Exit(1)
-						}
-
-						datas := soup.HTMLParse(doc)
-
-						if strings.Contains(datas.HTML(), "input") {
-							redirUrl := datas.FindAll("input")[0].Attrs()["value"]
-
-							data := url.Values{}
-							data.Set("data", redirUrl)
-
-							client := &http.Client{}
-							r, err := http.NewRequest("POST", "https://jkanime.net/gsplay/redirect_post.php", strings.NewReader(data.Encode())) // URL-encoded payload
+							p, err := http.PostForm("https://jkanime.net/gsplay/api.php", url.Values{"v": {hash[1]}})
 							if err != nil {
 								log.Fatal(err)
 							}
+
 							r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-							r.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+							r.Header.Add("Content-Length", strconv.Itoa(len(d.Encode())))
 
-							res, err := client.Do(r)
-							if err != nil {
-								log.Fatal(err)
+							if nil != err {
+								fmt.Println("error in action happened getting the response", err)
 							}
 
-							defer res.Body.Close()
+							defer p.Body.Close()
+							body, err := ioutil.ReadAll(p.Body)
 
-							if err != nil {
-								log.Fatal(err)
+							if nil != err {
+								fmt.Println("error in acion happened reading the body", err)
 							}
 
-							vUrl := strings.Split(string(fmt.Sprint(res.Request)), " ")[1]
+							var url Url
+							_ = json.Unmarshal([]byte(body), &url)
 
-							if strings.Contains(vUrl, "#") {
-								hash := strings.Split(vUrl, "#")
+							urls = append(urls, url.File)
 
-								d := url.Values{}
-								d.Set("v", hash[1])
-
-								p, err := http.PostForm("https://jkanime.net/gsplay/api.php", url.Values{"v": {hash[1]}})
-								if err != nil {
-									log.Fatal(err)
-								}
-
-								r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-								r.Header.Add("Content-Length", strconv.Itoa(len(d.Encode())))
-
-								if nil != err {
-									fmt.Println("error in action happened getting the response", err)
-								}
-
-								defer p.Body.Close()
-								body, err := ioutil.ReadAll(p.Body)
-
-								if nil != err {
-									fmt.Println("error in acion happened reading the body", err)
-								}
-
-								var url Url
-								_ = json.Unmarshal([]byte(body), &url)
-
-								urls = append(urls, url.File)
-
-							} else {
-								urls = append(urls, *&vUrl)
-							}
+						} else {
+							urls = append(urls, *&vUrl)
 						}
 					}
 				}
 			}
 		}
-
 	}
 
 	servers := []models.Server{}
@@ -340,6 +311,7 @@ func videosByServer(r *http.Request) (interface{}, error) {
 		}
 		servers = append(servers, s)
 	}
+
 	return servers, err
 }
 
