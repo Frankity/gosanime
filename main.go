@@ -10,14 +10,10 @@ import (
 
 func main() {
 	app := server.New()
-
-	//server.SqlInit()
-
 	http.HandleFunc("/", app.Router.ServeHTTP)
 	port := ":" + os.Getenv("PORT")
 	log.Println("App running again...")
 	log.Fatal(http.ListenAndServe(port, nil))
-
 }
 
 func check(e error) {
