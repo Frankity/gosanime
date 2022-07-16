@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"os"
 
+	"xyz.frankity/gosanime/main/config"
 	"xyz.frankity/gosanime/main/server"
 )
 
 func main() {
 	app := server.New()
 	http.HandleFunc("/", app.Router.ServeHTTP)
-	port := ":" + os.Getenv("PORT")
+	port := ":" + config.Config().Port
 	log.Println("App running again...")
 	log.Fatal(http.ListenAndServe(port, nil))
 }

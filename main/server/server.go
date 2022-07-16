@@ -24,6 +24,5 @@ func (a *Server) initRoutes() {
 	a.Router.HandleFunc("/api/v1/anime", a.GetAnime()).Methods("GET")
 	a.Router.HandleFunc("/api/v1/video", a.GetVideoServers()).Methods("GET")
 	a.Router.HandleFunc("/api/v1/tags", a.GetTag()).Methods("GET")
-	a.Router.HandleFunc("/api/v1/users", a.StoreUser()).Methods("POST")
-	a.Router.HandleFunc("/api/v1/search", a.GetSearchAnime()).Methods("GET")
+	a.Router.HandleFunc("/api/v1/search", a.SearchAnime()).Methods("GET")
 }
