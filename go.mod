@@ -26,6 +26,7 @@ require (
 )
 
 require (
+	github.com/EDDYCJY/fake-useragent v0.2.0
 	github.com/mattn/go-sqlite3 v1.14.11 // indirect
 	github.com/ysmood/goob v0.3.0 // indirect
 	github.com/ysmood/gson v0.6.4 // indirect

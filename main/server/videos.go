@@ -23,12 +23,23 @@ func videosByServer(r *http.Request) (interface{}, error) {
 	anime := r.Form.Get("anime")
 	episode := r.Form.Get("episode")
 
-	resp, err := soup.Get(fmt.Sprintf("%v/%s/%s/", config.Rooturl, anime, episode))
+	client := http.DefaultClient
+
+	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+
+	res, err := client.Get(fmt.Sprintf("%v/%s/%s/", config.Rooturl, anime, episode))
 	if err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
-	doc := soup.HTMLParse(resp)
+	responseData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	responseString := string(responseData)
+
+	doc := soup.HTMLParse(responseString)
 
 	urls := []string{}
 	for _, in := range doc.FindAll("script") {

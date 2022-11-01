@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,12 +16,25 @@ import (
 
 func top() ([]models.Anime, error) {
 	animes := []models.Anime{}
-	resp, err := soup.Get(fmt.Sprintf("%v%s", config.Rooturl, config.TopUrl))
+
+	client := http.DefaultClient
+
+	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+
+	res, err := client.Get(fmt.Sprintf("%v%s", config.Rooturl, config.TopUrl))
 	if err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
-	doc := soup.HTMLParse(resp)
+	responseData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	responseString := string(responseData)
+
+	doc := soup.HTMLParse(responseString)
+
 	main := doc.Find("section", "class", "contenido").Find("div", "class", "container").Find("div", "class", "row").Find("div", "class", "col-lg-12").FindAll("div", "class", "list")
 
 	for _, p := range main {
@@ -44,14 +59,23 @@ func anime(r *http.Request) (interface{}, error) {
 	}
 	x := r.Form.Get("id")
 
-	resp, err := soup.Get(fmt.Sprintf("%v/%s", config.Rooturl, x))
+	client := http.DefaultClient
+
+	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+
+	res, err := client.Get(fmt.Sprintf("%v/%s", config.Rooturl, x))
 	if err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
-	print(fmt.Sprintf("%v/%s", config.Rooturl, x))
+	responseData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	doc := soup.HTMLParse(resp)
+	responseString := string(responseData)
+
+	doc := soup.HTMLParse(responseString)
 
 	episodes := doc.Find("div", "class", "anime__pagination").FindAll("a", "class", "numbers")
 
@@ -101,13 +125,23 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	url := fmt.Sprintf("%v/buscar/%s/%s/", config.Rooturl, strings.Replace(anime, "-", "_", -1), page)
 
-	resp, err := soup.Get(url)
+	client := http.DefaultClient
+
+	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+
+	res, err := client.Get(url)
 	if err != nil {
-		fmt.Println(err)
-		return err, err
+		log.Fatal(err)
 	}
 
-	doc := soup.HTMLParse(resp)
+	responseData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	responseString := string(responseData)
+
+	doc := soup.HTMLParse(responseString)
 
 	elements := doc.FindAll("div", "class", "anime__item")
 

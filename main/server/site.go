@@ -1,7 +1,9 @@
 package server
 
 import (
-	"os"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"strings"
 
 	"github.com/anaskhan96/soup"
@@ -11,12 +13,24 @@ import (
 
 func main() ([]models.Anime, error) {
 	animes := []models.Anime{}
-	resp, err := soup.Get(config.Rooturl)
+
+	client := http.DefaultClient
+
+	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+
+	res, err := client.Get(config.Rooturl)
 	if err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
-	doc := soup.HTMLParse(resp)
+	responseData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	responseString := string(responseData)
+
+	doc := soup.HTMLParse(responseString)
 
 	main := doc.Find("div", "class", "trending__anime").FindAll("div", "class", "anime__item")
 

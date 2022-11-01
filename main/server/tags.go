@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -23,12 +25,23 @@ func tags(r *http.Request) (interface{}, error) {
 	tag := r.Form.Get("tag")
 	page := r.Form.Get("page")
 
-	resp, err := soup.Get(fmt.Sprintf("%v%s/%s/%s", config.Rooturl, config.Genreurl, tag, page))
+	client := http.DefaultClient
+
+	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+
+	res, err := client.Get(fmt.Sprintf("%v%s/%s/%s", config.Rooturl, config.Genreurl, tag, page))
 	if err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
-	doc := soup.HTMLParse(resp)
+	responseData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	responseString := string(responseData)
+
+	doc := soup.HTMLParse(responseString)
 
 	main := doc.FindAll("div", "class", "anime__item")
 
