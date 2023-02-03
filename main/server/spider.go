@@ -18,7 +18,7 @@ func (a *Server) IndexHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		greet := config.Greet{
-			Message: fmt.Sprintf("Gosanime Api vr: %v is Running.", config.Config().Version),
+			Message: fmt.Sprintf("Gosanime Api v: %v is Running.", config.Config().Version),
 			Status:  "OK",
 			Code:    "200",
 		}
