@@ -77,19 +77,13 @@ func anime(r *http.Request) (interface{}, error) {
 
 	doc := soup.HTMLParse(responseString)
 
+	var episodesData string
+
 	episodes := doc.Find("div", "class", "anime__pagination").FindAll("a", "class", "numbers")
 
-	lastEp := strings.Split(strings.TrimSpace(episodes[len(episodes)-1].Text()), "-")[1]
-	lastEpIntVal, err := strconv.Atoi(strings.TrimSpace(lastEp))
+	episodeNumber := strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[5].Text())
 
-	eplist := []models.Episode{}
-	for i := 0; i < lastEpIntVal; i++ {
-		ep := models.Episode{
-			Id:      strconv.Itoa(i),
-			Episode: x,
-		}
-		eplist = append(eplist, ep)
-	}
+	lastEp := strings.Split(strings.TrimSpace(episodes[len(episodes)-1].Text()), "-")[1]
 
 	genres := doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[1].FindAll("a")
 
@@ -101,15 +95,21 @@ func anime(r *http.Request) (interface{}, error) {
 
 	strings.Join(result, ",")
 
+	if episodeNumber == "Desconocido" {
+		episodesData = lastEp
+	} else {
+		episodesData = episodeNumber
+	}
+
 	an := models.Anime{
 		ID:       x,
 		Name:     doc.Find("div", "class", "anime__details__content").Find("h3").Text(),
 		Poster:   doc.Find("div", "class", "anime__details__pic").Attrs()["data-setbg"],
 		Type:     strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[0].Text()),
-		Synopsis: doc.Find("div", "class", "anime__details__content").Find("p").Text(),
+		Synopsis: doc.Find("div", "class", "anime__details__text").Find("p").Text(),
 		Genre:    result,
-		State:    "", //strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[6].Find("span", "class", "enemision").Text()),
-		Episodes: eplist,
+		State:    doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[8].Children()[2].Text(),
+		Episodes: strings.TrimSpace(episodesData),
 	}
 
 	return an, err

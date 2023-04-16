@@ -1,14 +1,14 @@
 package models
 
 type Anime struct {
-	ID       string    `json:"id"`
-	Name     string    `json:"name"`
-	Poster   string    `json:"poster"`
-	Type     string    `json:"type"`
-	Synopsis string    `json:"synopsis"`
-	State    string    `json:"state"`
-	Genre    []string  `json:"genre"`
-	Episodes []Episode `json:"episodes"`
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Poster   string   `json:"poster"`
+	Type     string   `json:"type"`
+	Synopsis string   `json:"synopsis"`
+	State    string   `json:"state"`
+	Genre    []string `json:"genre"`
+	Episodes string   `json:"episodes"`
 }
 
 type Episode struct {
