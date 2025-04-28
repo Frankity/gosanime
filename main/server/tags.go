@@ -15,7 +15,7 @@ import (
 )
 
 func tags(r *http.Request) (interface{}, error) {
-
+	var err error
 	if err := r.ParseForm(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -27,8 +27,10 @@ func tags(r *http.Request) (interface{}, error) {
 
 	client := http.DefaultClient
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
-
+	client.Transport, err = config.New(client.Transport)
+	if err != nil {
+		log.Fatal(err)
+	}
 	res, err := client.Get(fmt.Sprintf("%v%s/%s/%s", config.Rooturl, config.Genreurl, tag, page))
 	if err != nil {
 		log.Fatal(err)

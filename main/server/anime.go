@@ -12,26 +12,21 @@ import (
 	"github.com/anaskhan96/soup"
 	"xyz.frankity/gosanime/main/config"
 	"xyz.frankity/gosanime/main/models"
+	"xyz.frankity/gosanime/main/utils"
 )
 
 func top() ([]models.Anime, error) {
 	animes := []models.Anime{}
+	var err error
 
-	client := http.DefaultClient
+	client := utils.NewHTTPClient()
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
-
-	res, err := client.Get(fmt.Sprintf("%v%s", config.Rooturl, config.TopUrl))
+	res, err := client.R().Get(fmt.Sprintf("%v%s", config.Rooturl, config.TopUrl))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	responseString := string(responseData)
+	responseString := res.String()
 
 	doc := soup.HTMLParse(responseString)
 
@@ -53,27 +48,21 @@ func top() ([]models.Anime, error) {
 }
 
 func anime(r *http.Request) (interface{}, error) {
+	var err error
 
 	if err := r.ParseForm(); err != nil {
 		os.Exit(1)
 	}
 	x := r.Form.Get("id")
 
-	client := http.DefaultClient
+	client := utils.NewHTTPClient()
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
-
-	res, err := client.Get(fmt.Sprintf("%v/%s", config.Rooturl, x))
+	res, err := client.R().Get(fmt.Sprintf("%v/%s", config.Rooturl, x))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	responseString := string(responseData)
+	responseString := res.String()
 
 	doc := soup.HTMLParse(responseString)
 
@@ -108,7 +97,7 @@ func anime(r *http.Request) (interface{}, error) {
 		Type:     strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[0].Text()),
 		Synopsis: doc.Find("div", "class", "anime__details__text").Find("p").Text(),
 		Genre:    result,
-		State:    doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[8].Children()[2].Text(),
+		State:    "unknown", //doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[8].Children()[2].Text(),
 		Episodes: strings.TrimSpace(episodesData),
 	}
 
@@ -116,6 +105,8 @@ func anime(r *http.Request) (interface{}, error) {
 }
 
 func searchAnime(r *http.Request) (interface{}, error) {
+	var err error
+
 	if err := r.ParseForm(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -127,7 +118,10 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	client := http.DefaultClient
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
+	client.Transport, err = config.New(client.Transport)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	res, err := client.Get(url)
 	if err != nil {

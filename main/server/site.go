@@ -1,37 +1,29 @@
 package server
 
 import (
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strings"
 
 	"github.com/anaskhan96/soup"
 	"xyz.frankity/gosanime/main/config"
 	"xyz.frankity/gosanime/main/models"
+	"xyz.frankity/gosanime/main/utils"
 )
 
 func main() ([]models.Anime, error) {
+	var err error
 	animes := []models.Anime{}
 
-	client := http.DefaultClient
+	client := utils.NewHTTPClient()
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
-
-	res, err := client.Get(config.Rooturl)
+	resp, err := client.R().Get(config.Rooturl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	responseString := string(responseData)
+	responseString := resp.String()
 
 	doc := soup.HTMLParse(responseString)
-
 	main := doc.Find("div", "class", "trending__anime").FindAll("div", "class", "anime__item")
 
 	for _, p := range main {
@@ -44,5 +36,6 @@ func main() ([]models.Anime, error) {
 		}
 		animes = append(animes, anime)
 	}
+
 	return animes, nil
 }

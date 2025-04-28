@@ -2,8 +2,7 @@ package config
 
 import (
 	"fmt"
-
-	"io/ioutil"
+	"os"
 
 	"gopkg.in/yaml.v2"
 )
@@ -15,8 +14,7 @@ type YamlConfig struct {
 }
 
 func Config() YamlConfig {
-
-	yamlFile, err := ioutil.ReadFile("config.yaml")
+	yamlFile, err := os.ReadFile("config.yaml")
 	if err != nil {
 		fmt.Printf("Error reading YAML file: %s\n", err)
 	}
@@ -28,7 +26,6 @@ func Config() YamlConfig {
 	}
 
 	return yamlConfig
-
 }
 
 func GetNoBearer() interface{} {

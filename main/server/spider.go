@@ -29,7 +29,7 @@ func (a *Server) IndexHandler() http.HandlerFunc {
 
 func (a *Server) GetMain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
+		fmt.Println(r)
 		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
 			SendResponse(w, r, config.GetNoBearer(), http.StatusUnauthorized)
 		} else {

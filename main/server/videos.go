@@ -14,30 +14,25 @@ import (
 	"github.com/anaskhan96/soup"
 	"xyz.frankity/gosanime/main/config"
 	"xyz.frankity/gosanime/main/models"
+	"xyz.frankity/gosanime/main/utils"
 )
 
 func videosByServer(r *http.Request) (interface{}, error) {
+	var err error
 	if err := r.ParseForm(); err != nil {
 		os.Exit(1)
 	}
 	anime := r.Form.Get("anime")
 	episode := r.Form.Get("episode")
 
-	client := http.DefaultClient
+	client := utils.NewHTTPClient()
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
-
-	res, err := client.Get(fmt.Sprintf("%v/%s/%s/", config.Rooturl, anime, episode))
+	res, err := client.R().Get(fmt.Sprintf("%v/%s/%s/", config.Rooturl, anime, episode))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	responseString := string(responseData)
+	responseString := res.String()
 
 	doc := soup.HTMLParse(responseString)
 

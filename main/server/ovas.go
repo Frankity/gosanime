@@ -2,34 +2,27 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strings"
 
 	"github.com/anaskhan96/soup"
 	"xyz.frankity/gosanime/main/config"
 	"xyz.frankity/gosanime/main/models"
+	"xyz.frankity/gosanime/main/utils"
 )
 
 func ovas() ([]models.Anime, error) {
+	var err error
 	animes := []models.Anime{}
 
-	client := http.DefaultClient
+	client := utils.NewHTTPClient()
 
-	http.DefaultClient.Transport = config.AddCloudFlareByPass(http.DefaultClient.Transport)
-
-	res, err := client.Get(fmt.Sprintf("%v%s", config.Rooturl, config.Ovasurl))
+	res, err := client.R().Get(fmt.Sprintf("%v%s", config.Rooturl, config.Ovasurl))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	responseString := string(responseData)
+	responseString := res.String()
 
 	doc := soup.HTMLParse(responseString)
 
