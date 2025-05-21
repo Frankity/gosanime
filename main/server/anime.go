@@ -15,6 +15,9 @@ import (
 	"xyz.frankity/gosanime/main/utils"
 )
 
+// top fetches a list of top anime from the source.
+// It scrapes the configured TopUrl to gather anime information.
+// Returns a slice of models.Anime and an error if any issues occur during scraping or processing.
 func top() ([]models.Anime, error) {
 	animes := []models.Anime{}
 	var err error
@@ -23,6 +26,8 @@ func top() ([]models.Anime, error) {
 
 	res, err := client.R().Get(fmt.Sprintf("%v%s", config.Rooturl, config.TopUrl))
 	if err != nil {
+		// Using log.Fatal will exit the program, consider returning the error instead
+		// for better error handling by the caller.
 		log.Fatal(err)
 	}
 
@@ -44,22 +49,28 @@ func top() ([]models.Anime, error) {
 		}
 		animes = append(animes, anime)
 	}
-	return animes, nil
+	return animes, nil // err is always nil here due to log.Fatal above
 }
 
+// anime fetches detailed information for a specific anime based on its ID.
+// It expects an 'id' query parameter in the http.Request.
+// The ID is used to construct the URL for scraping the anime's details page.
+// Returns an interface{} containing a models.Anime object and an error if any issues occur.
 func anime(r *http.Request) (interface{}, error) {
 	var err error
 
 	if err := r.ParseForm(); err != nil {
+		// Exiting here might be too drastic for a request handler.
+		// Consider returning an error and letting the caller decide how to handle it.
 		os.Exit(1)
 	}
-	x := r.Form.Get("id")
+	x := r.Form.Get("id") // ID of the anime to fetch
 
 	client := utils.NewHTTPClient()
 
 	res, err := client.R().Get(fmt.Sprintf("%v/%s", config.Rooturl, x))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // Consider returning error
 	}
 
 	responseString := res.String()
@@ -82,7 +93,7 @@ func anime(r *http.Request) (interface{}, error) {
 		result = append(result, strings.ToLower(genres[a].Text()))
 	}
 
-	strings.Join(result, ",")
+	strings.Join(result, ",") // The result of Join is not assigned, this line has no effect.
 
 	if episodeNumber == "Desconocido" {
 		episodesData = lastEp
@@ -97,40 +108,47 @@ func anime(r *http.Request) (interface{}, error) {
 		Type:     strings.TrimSpace(doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[0].Text()),
 		Synopsis: doc.Find("div", "class", "anime__details__text").Find("p").Text(),
 		Genre:    result,
-		State:    "unknown", //doc.Find("div", "class", "anime__details__widget").Find("ul").FindAll("li")[8].Children()[2].Text(),
+		State:    "unknown", // State seems to be hardcoded or placeholder.
 		Episodes: strings.TrimSpace(episodesData),
 	}
 
-	return an, err
+	return an, err // err is likely nil here if previous errors cause fatal exits.
 }
 
+// searchAnime handles requests to search for anime.
+// It expects 'anime' (search query) and 'page' (page number) as query parameters in the http.Request.
+// It scrapes the search results from the configured URL.
+// Returns an interface{} containing a models.SearchAnimeResponse object and an error if any.
 func searchAnime(r *http.Request) (interface{}, error) {
 	var err error
 
 	if err := r.ParseForm(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		fmt.Println(err) // Consider logging instead of just printing.
+		os.Exit(1)       // Consider returning an error.
 	}
-	anime := r.Form.Get("anime")
-	page := r.Form.Get("page")
+	animeQuery := r.Form.Get("anime") // The search term for anime.
+	page := r.Form.Get("page")        // The page number for search results.
 
-	url := fmt.Sprintf("%v/buscar/%s/%s/", config.Rooturl, strings.Replace(anime, "-", "_", -1), page)
+	url := fmt.Sprintf("%v/buscar/%s/%s/", config.Rooturl, strings.Replace(animeQuery, "-", "_", -1), page)
 
+	// DefaultClient is used here, consider consistency with utils.NewHTTPClient()
 	client := http.DefaultClient
 
+	// The config.New round tripper might be for specific proxy or transport settings.
 	client.Transport, err = config.New(client.Transport)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // Consider returning error.
 	}
 
 	res, err := client.Get(url)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // Consider returning error.
 	}
+	defer res.Body.Close() // Ensure the response body is closed.
 
 	responseData, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // Consider returning error.
 	}
 
 	responseString := string(responseData)
@@ -154,9 +172,14 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	pg, err := strconv.Atoi(page)
 	if err != nil {
+		// Printing to stdout in a server handler is generally not recommended.
+		// Log this error or return it in the response.
 		print(fmt.Sprintf("%v %s", err, "<- Error"))
+		// If Atoi fails, pg will be 0, which might lead to incorrect page logic.
 	}
 
+	// Pagination logic: if 12 elements are found, assume there's a next page.
+	// Otherwise, set page to -1 to indicate no more pages.
 	if len(elements) == 12 {
 		pg = pg + 1
 	} else {
@@ -165,10 +188,10 @@ func searchAnime(r *http.Request) (interface{}, error) {
 
 	ar := models.SearchAnimeResponse{
 		Data:    animes,
-		Status:  "200",
+		Status:  "200", // Status should ideally reflect actual HTTP status codes.
 		Message: "Success",
 		Page:    pg,
 	}
 
-	return ar, err
+	return ar, err // err might be from strconv.Atoi if not handled, or nil.
 }
