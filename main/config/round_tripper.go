@@ -23,38 +23,46 @@ import (
 const (
 	// UserAgent is the default user agent used by HTTP requests.
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36"
-	//UserAgent = "Mozilla/5.0 (Linux; Android 7.1.1; CPH1609) AppleWebKit/537.36 (KHTML, like Gecko) coc_coc_browser/78.0.142 Mobile Chrome/72.0.3626.142 Mobile Safari/537.36"
 )
 
 var (
+	// Regexes for parsing Cloudflare challenge page elements
 	jschlRE  = regexp.MustCompile(`name="jschl_vc" value="(\w+)"`)
 	passRE   = regexp.MustCompile(`name="pass" value="(.+?)"`)
-	rRE      = regexp.MustCompile(`name="r" value="(.+?)"`)
-	actionRE = regexp.MustCompile(`action="(.*?)"`)
+	rRE      = regexp.MustCompile(`name="r" value="(.+?)"`) // Used for POST challenges
+	actionRE = regexp.MustCompile(`action="(.*?)"`)         // Used for POST challenges
+	keyRE    = regexp.MustCompile("<div style=\"display:none;visibility:hidden;\" id=\".*?\">(.*?)<")
 
-	keyRE = regexp.MustCompile("<div style=\"display:none;visibility:hidden;\" id=\".*?\">(.*?)<")
-	/*jsRE    = regexp.MustCompile(
-		`setTimeout\(function\(\){\s+(var ` +
-			`s,t,o,p,b,r,e,a,k,i,n,g,f.+?\r?\n[\s\S]+?a\.value =.+?)\r?\n`,
-	)
-	jsReplace1RE = regexp.MustCompile(`a\.value = (.+ \+ t\.length).+`)
-	jsReplace2RE = regexp.MustCompile(`\s{3,}[a-z](?: = |\.).+`)
-	jsReplace3RE = regexp.MustCompile(`[\n\\']`)
-	*/
-	jsRE = regexp.MustCompile(
+	// Regexes for extracting and manipulating Cloudflare's JavaScript challenge code
+	jsChallengeRE = regexp.MustCompile(
 		"setTimeout\\(function\\(\\){\\s+(var " +
 			"s,t,o,p,b,r,e,a,k,i,n,g,f.+?\\r?\\n[\\s\\S]+?a\\.value =.+?)\\r?\\n",
 	)
-	jsReplace1RE = regexp.MustCompile("\\s{3,}[a-z](?: = |\\.).+")
-	jsReplace2RE = regexp.MustCompile("[\\n\\\\']")
-	jsReplace3RE = regexp.MustCompile(";\\s*\\d+\\s*$")
-	jsReplace4RE = regexp.MustCompile("a\\.value\\s*\\=")
+	// Regexes for cleaning up the extracted JS (common and GET specific)
+	jsGenericCleanup1RE = regexp.MustCompile("\\s{3,}[a-z](?: = |\\.).+")
+	jsGenericCleanup2RE = regexp.MustCompile("[\\n\\\\']")
+	// Regexes for GET specific JS cleanup (formerly jsReplace3RE, jsReplace4RE)
+	jsGetCleanup1RE = regexp.MustCompile(";\\s*\\d+\\s*$")
+	jsGetCleanup2RE = regexp.MustCompile("a\\.value\\s*\\=")
 )
 
 // RoundTripper is a http client RoundTripper that can handle the Cloudflare anti-bot.
 type RoundTripper struct {
 	upstream http.RoundTripper
 	cookies  http.CookieJar
+}
+
+// ParsedChallengePage holds data extracted from a Cloudflare challenge page.
+type ParsedChallengePage struct {
+	JschlVc string
+	Pass    string
+	R       string // Specific to POST challenges
+	Action  string // Specific to POST challenges
+	Key     string // Specific to POST challenges
+	Body    string
+	Host    string
+	Scheme  string
+	FullURL *url.URL
 }
 
 // New wraps a http client transport with one that can handle the Cloudflare anti-bot.
@@ -69,8 +77,8 @@ func New(upstream http.RoundTripper) (*RoundTripper, error) {
 	return &RoundTripper{upstream, jar}, nil
 }
 
-// RoundTrip implements the RoundTripper interface for the Transport type.
-func (rt RoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+// setDefaultHeaders sets default HTTP headers if they are not already present.
+func setDefaultHeaders(r *http.Request) {
 	if r.Header.Get("User-Agent") == "" {
 		r.Header.Set("User-Agent", UserAgent)
 	}
@@ -85,14 +93,12 @@ func (rt RoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	if r.Header.Get("DNT") == "" {
 		r.Header["DNT"] = []string{"1"}
-		//r.Header.Add("Dnt", "1")
 	}
-	/*if r.Header.Get("Upgrade-Insecure-Requests") == "" {
-		r.Header.Set("Upgrade-Insecure-Requests", "1")
-	}*/
-	/*if r.Header.Get("Connection") == "" {
-		r.Header.Set("Connection", "keep-alive")
-	}*/
+}
+
+// RoundTrip implements the RoundTripper interface for the Transport type.
+func (rt RoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	setDefaultHeaders(r)
 	// Pass along Cloudflare cookies obtained previously
 	for _, cookie := range rt.cookies.Cookies(r.URL) {
 		r.AddCookie(cookie)
@@ -110,6 +116,7 @@ func (rt RoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 		d, _ := httputil.DumpResponse(resp, false)
 		fmt.Fprintln(os.Stderr, "===== [DUMP Response] =====\n", string(d))
 	}
+
 	// Check if the Cloudflare anti-bot has prevented the request
 	if resp.StatusCode == 503 && strings.HasPrefix(resp.Header.Get("Server"), "cloudflare") {
 		// Cloudflare requires a delay before solving the challenge
@@ -117,140 +124,110 @@ func (rt RoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 		if cookies := resp.Cookies(); len(cookies) > 0 {
 			rt.cookies.SetCookies(resp.Request.URL, resp.Cookies())
 		}
-		req, err := buildAnswerRequest(resp)
+
+		challengeData, err := parseChallengeResponse(resp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse challenge response: %w", err)
+		}
+
+		answerReq, err := buildAnswerRequest(challengeData, resp.Request.Header, resp.Cookies())
+		if err != nil {
+			return nil, fmt.Errorf("failed to build answer request: %w", err)
+		}
+
+		// Store cookies from the original response before closing its body
+		// (parseChallengeResponse closes the body)
+		originalRespCookies := resp.Cookies()
+
+		resp, err = rt.upstream.RoundTrip(answerReq)
 		if err != nil {
 			return nil, err
 		}
-		resp, err = rt.upstream.RoundTrip(req)
-		if err != nil {
-			return nil, err
+		// It's important to persist cookies obtained from solving the challenge
+		if cookies := originalRespCookies; len(cookies) > 0 {
+			rt.cookies.SetCookies(answerReq.URL, cookies)
+		}
+		if cookies := resp.Cookies(); len(cookies) > 0 {
+			rt.cookies.SetCookies(resp.Request.URL, cookies)
 		}
 	}
 	return resp, err
 }
 
-func buildAnswerRequest(resp *http.Response) (*http.Request, error) {
+// parseChallengeResponse extracts necessary data from the Cloudflare challenge page.
+func parseChallengeResponse(resp *http.Response) (*ParsedChallengePage, error) {
 	b, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+	resp.Body.Close() // Ensure body is closed after reading
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+	bodyStr := string(b)
+
+	data := &ParsedChallengePage{
+		Body:    bodyStr,
+		Host:    resp.Request.URL.Host,
+		Scheme:  resp.Request.URL.Scheme,
+		FullURL: resp.Request.URL,
+	}
+
+	if m := jschlRE.FindStringSubmatch(bodyStr); len(m) > 0 {
+		data.JschlVc = m[1]
+	}
+	if m := passRE.FindStringSubmatch(bodyStr); len(m) > 0 {
+		data.Pass = m[1]
+	}
+
+	// Fields specific to POST challenges
+	if !strings.Contains(bodyStr, "method=\"get\"") {
+		if m := rRE.FindStringSubmatch(bodyStr); len(m) > 0 {
+			data.R = m[1]
+		} else {
+			return nil, errors.New("no r found for POST challenge")
+		}
+		if m := actionRE.FindStringSubmatch(bodyStr); len(m) > 0 {
+			data.Action = m[1]
+		} else {
+			return nil, errors.New("no action found for POST challenge")
+		}
+		if m := keyRE.FindStringSubmatch(bodyStr); len(m) > 0 {
+			data.Key = m[1]
+		} else {
+			return nil, errors.New("no key id found for POST challenge")
+		}
+	}
+	return data, nil
+}
+
+// buildAnswerRequest determines the method and constructs the challenge answer request.
+func buildAnswerRequest(challengeData *ParsedChallengePage, originalHeaders http.Header, challengeCookies []*http.Cookie) (*http.Request, error) {
+	var req *http.Request
+	var err error
+
+	if strings.Contains(challengeData.Body, "method=\"get\"") {
+		req, err = buildGETAnswerRequest(challengeData)
+	} else {
+		req, err = buildPOSTAnswerRequest(challengeData)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	var req *http.Request
-	// old GET method
-	if strings.Contains(string(b), "method=\"get\"") {
-		js, err := extractJSGET(string(b), resp.Request.URL.Host)
-		if err != nil {
-			return nil, err
-		}
-		// Obtain the answer from the JavaScript challenge
-		num, err := evaluateJS(js)
-		answer := fmt.Sprintf("%.10f", num)
-		if err != nil {
-			return nil, err
-		}
-		// Begin building the URL for submitting the answer
-		chkURL, _ := url.Parse("/cdn-cgi/l/chk_jschl")
-		u := resp.Request.URL.ResolveReference(chkURL)
-		// Obtain all the parameters for the URL
-		var params = make(url.Values)
-		if m := jschlRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			params.Set("jschl_vc", m[1])
-		}
-		if m := passRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			params.Set("pass", m[1])
-		}
-		params.Set("jschl_answer", answer)
-		u.RawQuery = params.Encode()
-
-		req, err = http.NewRequest("GET", u.String(), nil)
-		if err != nil {
-			return nil, err
-		}
-
-		// new POST request
-	} else {
-		// get hidden key from page
-		key := ""
-		if m := keyRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			//fmt.Printf("x: %s\n\n",x[1])
-			key = m[1]
-		} else {
-			return nil, errors.New("no key id found")
-		}
-
-		action := ""
-		if m := actionRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			//fmt.Printf("x: %s\n\n",x[1])
-			action = m[1]
-		} else {
-			return nil, errors.New("no key id found")
-		}
-
-		js, err := extractJSPOST(string(b), resp.Request.URL.Host, key)
-		if err != nil {
-			return nil, err
-		}
-		// Obtain the answer from the JavaScript challenge
-		num, err := evaluateJS(js)
-		answer := fmt.Sprintf("%.10f", num)
-		if err != nil {
-			return nil, err
-		}
-
-		// Obtain all the parameters for the URL
-		var params = make(url.Values)
-		if m := jschlRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			params.Set("jschl_vc", m[1])
-		} else {
-			return nil, errors.New("no jschl_vc found")
-		}
-		if m := passRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			params.Set("pass", m[1])
-		} else {
-			return nil, errors.New("no pass found")
-		}
-		if m := rRE.FindStringSubmatch(string(b)); len(m) > 0 {
-			params.Set("r", m[1])
-		} else {
-			return nil, errors.New("no r found")
-		}
-		params.Set("jschl_answer", answer)
-
-		body := fmt.Sprintf("r=%s&jschl_vc=%s&pass=%s&jschl_answer=%s",
-			url.QueryEscape(params.Get("r")),
-			params.Get("jschl_vc"),
-			params.Get("pass"),
-			params.Get("jschl_answer"),
-		)
-
-		//req, err = http.NewRequest("POST", resp.Request.URL.Scheme + "://" + resp.Request.URL.Host + html.UnescapeString(action), strings.NewReader(params.Encode()))
-		req, err = http.NewRequest("POST",
-			resp.Request.URL.Scheme+"://"+resp.Request.URL.Host+html.UnescapeString(action),
-			strings.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	}
 	// Copy all the header values from the original request
-	if resp.Request.Header != nil {
-		for key, vals := range resp.Request.Header {
+	if originalHeaders != nil {
+		for key, vals := range originalHeaders {
 			for _, val := range vals {
-				// ensure keep case sensitivity
-				req.Header[key] = []string{val}
-				//req.Header.Add(key, val)
+				req.Header[key] = []string{val} // ensure keep case sensitivity
 			}
 		}
 	}
-	//req.Header.Set("Referer", resp.Request.URL.Scheme + "://" + resp.Request.URL.Host + resp.Request.URL.Path)
-	req.Header.Set("Referer", resp.Request.URL.String())
-	req.Header.Set("Origin", resp.Request.URL.Scheme+"://"+resp.Request.URL.Host)
-	// send the cookies obtained from the Cloudflare challenge
-	for _, cookie := range resp.Cookies() {
+	req.Header.Set("Referer", challengeData.FullURL.String())
+	req.Header.Set("Origin", challengeData.Scheme+"://"+challengeData.Host)
+
+	// Add cookies obtained from the Cloudflare challenge response itself
+	for _, cookie := range challengeCookies {
 		req.AddCookie(cookie)
 	}
+
 	if os.Getenv("CFRT_DEBUG") != "" {
 		d, _ := httputil.DumpRequest(req, true)
 		fmt.Fprintln(os.Stderr, "===== [Challenge Answer Request] =====\n", string(d)+"\n\n")
@@ -258,61 +235,161 @@ func buildAnswerRequest(resp *http.Response) (*http.Request, error) {
 	return req, nil
 }
 
-func extractJSGET(body, domain string) (string, error) {
-	matches := jsRE.FindStringSubmatch(body)
-	if len(matches) == 0 {
-		return "", errors.New("Unable to identify Cloudflare IUAM Javascript on the page")
+// buildGETAnswerRequest constructs the GET request for submitting the Cloudflare challenge answer.
+func buildGETAnswerRequest(challengeData *ParsedChallengePage) (*http.Request, error) {
+	js, err := extractJSGET(challengeData.Body, challengeData.Host)
+	if err != nil {
+		return nil, fmt.Errorf("extractJSGET failed: %w", err)
 	}
 
-	// check if we're i testing mode and overwrite localhost value
-	if strings.Contains(domain, "127.0.0.1") {
-		domain = "torrentz2.eu"
+	num, err := evaluateJS(js)
+	if err != nil {
+		return nil, fmt.Errorf("evaluateJS failed for GET: %w", err)
 	}
+	answer := fmt.Sprintf("%.10f", num)
 
-	js := matches[1]
-	js = strings.Replace(js, "s,t,o,p,b,r,e,a,k,i,n,g,f,", "s,t = \""+domain+"\",o,p,b,r,e,a,k,i,n,g,f,", 1)
-	js = jsReplace1RE.ReplaceAllString(js, "")
-	js = jsReplace2RE.ReplaceAllString(js, "")
-	js = jsReplace3RE.ReplaceAllString(js, "")
-	js = jsReplace4RE.ReplaceAllString(js, "return ")
-	if os.Getenv("CFRT_DEBUG_JS") != "" {
-		fmt.Fprintln(os.Stderr, "===== [JavaScript GET] =====\n\n\n", js)
+	chkURL, _ := url.Parse("/cdn-cgi/l/chk_jschl")
+	u := challengeData.FullURL.ResolveReference(chkURL)
+
+	params := make(url.Values)
+	if challengeData.JschlVc == "" {
+		return nil, errors.New("jschl_vc not found in challenge data for GET")
 	}
-	return js, nil
+	params.Set("jschl_vc", challengeData.JschlVc)
+
+	if challengeData.Pass == "" {
+		return nil, errors.New("pass not found in challenge data for GET")
+	}
+	params.Set("pass", challengeData.Pass)
+	params.Set("jschl_answer", answer)
+	u.RawQuery = params.Encode()
+
+	return http.NewRequest("GET", u.String(), nil)
 }
 
-func extractJSPOST(body, domain string, key string) (string, error) {
-	matches := jsRE.FindStringSubmatch(body)
-	if len(matches) == 0 {
-		return "", errors.New("Unable to identify Cloudflare IUAM Javascript on the page")
+// buildPOSTAnswerRequest constructs the POST request for submitting the Cloudflare challenge answer.
+func buildPOSTAnswerRequest(challengeData *ParsedChallengePage) (*http.Request, error) {
+	if challengeData.Key == "" {
+		return nil, errors.New("key not found in challenge data for POST")
+	}
+	if challengeData.Action == "" {
+		return nil, errors.New("action not found in challenge data for POST")
 	}
 
-	// check if we're i testing mode and overwrite localhost value
+	jsExecutableCode, err := extractJSPOST(challengeData.Body, challengeData.Host, challengeData.Key)
+	if err != nil {
+		return nil, fmt.Errorf("extractJSPOST failed: %w", err)
+	}
+
+	jsResultValue, err := evaluateJS(jsExecutableCode)
+	if err != nil {
+		return nil, fmt.Errorf("evaluateJS failed for POST: %w", err)
+	}
+	answer := fmt.Sprintf("%.10f", jsResultValue)
+
+	if challengeData.JschlVc == "" {
+		return nil, errors.New("jschl_vc not found for POST challenge")
+	}
+	if challengeData.Pass == "" {
+		return nil, errors.New("pass not found for POST challenge")
+	}
+	if challengeData.R == "" {
+		return nil, errors.New("r not found for POST challenge")
+	}
+
+	formBody := fmt.Sprintf("r=%s&jschl_vc=%s&pass=%s&jschl_answer=%s",
+		url.QueryEscape(challengeData.R),
+		challengeData.JschlVc,
+		challengeData.Pass,
+		answer,
+	)
+
+	postURL := challengeData.Scheme + "://" + challengeData.Host + html.UnescapeString(challengeData.Action)
+	req, err := http.NewRequest("POST", postURL, strings.NewReader(formBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create POST request: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	return req, nil
+}
+
+// extractJSGET processes the Cloudflare JavaScript challenge for GET requests.
+func extractJSGET(pageBody, domain string) (string, error) {
+	matches := jsChallengeRE.FindStringSubmatch(pageBody)
+	if len(matches) < 2 { // Ensure the capturing group found a match
+		return "", errors.New("unable to identify Cloudflare IUAM Javascript on the page (GET challenge)")
+	}
+	extractedJS := matches[1]
+
+	// Substitute the current domain into the script.
+	// Cloudflare's script often uses 't' as a variable for the domain.
+	// The placeholder "s,t,o,p,b,r,e,a,k,i,n,g,f," is a known pattern in these scripts.
+	// During local testing, the domain might be 127.0.0.1, which Cloudflare's script might not handle.
+	// Replace with a real domain if testing locally.
+	// TODO: Consider making this test domain configurable or removing if not broadly applicable.
+	effectiveDomain := domain
 	if strings.Contains(domain, "127.0.0.1") {
-		domain = "torrentz2.eu"
+		effectiveDomain = "jkanime.net" // Using a more relevant example domain
 	}
+	processedJS := strings.Replace(extractedJS, "s,t,o,p,b,r,e,a,k,i,n,g,f,",
+		"s,t = \""+effectiveDomain+"\",o,p,b,r,e,a,k,i,n,g,f,", 1)
 
-	// extract and set domain
-	js := matches[1]
-	js = strings.Replace(js, "s,t,o,p,b,r,e,a,k,i,n,g,f,", "s,t = \""+domain+"\",o,p,b,r,e,a,k,i,n,g,f,", 1)
-
-	re2 := regexp.MustCompile("\\s{3,}[atf](?: = |\\.).+")
-	re31 := regexp.MustCompile("function\\(p\\){var p = eval\\(eval\\(e.*?; return \\+\\(p\\)}\\(\\)")
-	re32 := regexp.MustCompile("function\\(p\\){return eval\\(\\(.*?}")
-	re4 := regexp.MustCompile("\\s';\\s121'$")
-	re5 := regexp.MustCompile("a\\.value\\s*\\=")
-
-	js = re2.ReplaceAllString(js, "")
-	js = re31.ReplaceAllString(js, key)
-	js = re32.ReplaceAllString(js, "t.charCodeAt")
-	js = re4.ReplaceAllString(js, "")
-	js = re5.ReplaceAllString(js, "return ")
-	js = strings.Replace(js, ";", ";\n", -1)
+	// Apply regex-based transformations to make the JS executable by Otto.
+	// These regexes remove or alter parts of the script that are problematic for Otto
+	// or are part of browser-specific behavior not replicated.
+	processedJS = jsGenericCleanup1RE.ReplaceAllString(processedJS, "") // Removes lines like "a.value = t.length..."
+	processedJS = jsGenericCleanup2RE.ReplaceAllString(processedJS, "") // Removes newlines and backslashes within strings
+	processedJS = jsGetCleanup1RE.ReplaceAllString(processedJS, "")     // Removes trailing semicolon and number (e.g., "; 121")
+	processedJS = jsGetCleanup2RE.ReplaceAllString(processedJS, "return ") // Changes "a.value = ..." to "return ..." to get the result
 
 	if os.Getenv("CFRT_DEBUG_JS") != "" {
-		fmt.Fprintln(os.Stderr, "===== [JavaScript POST] =====\n\n\n", js)
+		fmt.Fprintf(os.Stderr, "===== [JavaScript GET Processing] =====\nOriginal Extracted JS:\n%s\n\nProcessed JS for Otto:\n%s\n", extractedJS, processedJS)
 	}
-	return js, nil
+	return processedJS, nil
+}
+
+// extractJSPOST processes the Cloudflare JavaScript challenge for POST requests.
+func extractJSPOST(pageBody, domain, challengeKey string) (string, error) {
+	matches := jsChallengeRE.FindStringSubmatch(pageBody)
+	if len(matches) < 2 { // Ensure the capturing group found a match
+		return "", errors.New("unable to identify Cloudflare IUAM Javascript on the page (POST challenge)")
+	}
+	extractedJS := matches[1]
+
+	// Substitute the current domain into the script.
+	effectiveDomain := domain
+	if strings.Contains(domain, "127.0.0.1") {
+		effectiveDomain = "jkanime.net" // Using a more relevant example domain
+	}
+	processedJS := strings.Replace(extractedJS, "s,t,o,p,b,r,e,a,k,i,n,g,f,",
+		"s,t = \""+effectiveDomain+"\",o,p,b,r,e,a,k,i,n,g,f,", 1)
+
+	// Specific regexes for POST challenge JS modifications.
+	// These are based on observed patterns in Cloudflare's POST challenge scripts.
+	// Their exact meaning can be obscure and tied to specific obfuscation techniques
+	// used by Cloudflare at the time the original code was written.
+	postSpecificCleanup1RE := regexp.MustCompile("\\s{3,}[atf](?: = |\\.).+")
+	// Replaces a complex eval function with the provided challengeKey.
+	postSpecificCleanup2RE := regexp.MustCompile("function\\(p\\){var p = eval\\(eval\\(e.*?; return \\+\\(p\\)}\\(\\)")
+	// Replaces another function pattern with 't.charCodeAt'.
+	postSpecificCleanup3RE := regexp.MustCompile("function\\(p\\){return eval\\(\\(.*?}")
+	// Removes a specific trailing pattern like " '; 121'".
+	postSpecificCleanup4RE := regexp.MustCompile("\\s';\\s121'$")
+	// Changes "a.value = ..." to "return ..." to get the result.
+	postSpecificReturnRE := regexp.MustCompile("a\\.value\\s*\\=")
+
+	processedJS = postSpecificCleanup1RE.ReplaceAllString(processedJS, "")
+	processedJS = postSpecificCleanup2RE.ReplaceAllString(processedJS, challengeKey)
+	processedJS = postSpecificCleanup3RE.ReplaceAllString(processedJS, "t.charCodeAt")
+	processedJS = postSpecificCleanup4RE.ReplaceAllString(processedJS, "")
+	processedJS = postSpecificReturnRE.ReplaceAllString(processedJS, "return ")
+	// Adding newlines after semicolons can sometimes help with debugging or Otto's parsing.
+	processedJS = strings.Replace(processedJS, ";", ";\n", -1)
+
+	if os.Getenv("CFRT_DEBUG_JS") != "" {
+		fmt.Fprintf(os.Stderr, "===== [JavaScript POST Processing] =====\nOriginal Extracted JS:\n%s\n\nProcessed JS for Otto:\n%s\n", extractedJS, processedJS)
+	}
+	return processedJS, nil
 }
 
 type ottoReturn struct {
