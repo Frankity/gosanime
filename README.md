@@ -15,7 +15,7 @@ Here's a detailed description of the available API endpoints:
 *   **Response Format:**
     ```json
     {
-      "message": "Welcome to Gosanime API"
+      "message": "Welcome to Gosanime API "
     }
     ```
 
