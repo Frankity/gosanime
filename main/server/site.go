@@ -10,40 +10,51 @@ import (
 	"xyz.frankity/gosanime/main/utils"
 )
 
-// main (consider renaming for clarity, e.g., fetchMainSiteData) fetches the list of anime
-// displayed on the main page of the source site, typically trending or new anime.
-// It scrapes the configured Rooturl (base URL of the site).
-// Returns a slice of models.Anime, where each Anime struct contains information
-// about an anime series, and an error if any issues occur during scraping or processing.
-// Note: Errors causing log.Fatal will terminate the application.
 func main() ([]models.Anime, error) {
-	var err error // err is declared but not meaningfully used if log.Fatal is called.
-	animes := []models.Anime{}
-
 	client := utils.NewHTTPClient()
 
 	resp, err := client.R().Get(config.Rooturl)
 	if err != nil {
-		log.Fatal(err) // Critical error, application will exit.
+		log.Fatal(err)
 	}
 
-	responseString := resp.String()
+	doc := soup.HTMLParse(resp.String())
 
-	doc := soup.HTMLParse(responseString)
-	// Finds the section assumed to contain trending anime items.
-	mainContent := doc.Find("div", "class", "trending__anime").FindAll("div", "class", "anime__item")
+	section := doc.Find("div", "class", "trending_div")
+	thumbs := section.FindAll("div", "class", "custom_thumb_home")
+	bodies := section.FindAll("div", "class", "card-body-home")
 
-	for _, p := range mainContent {
-		anime := models.Anime{
-			ID:     strings.Split(p.Find("h5").Find("a").Attrs()["href"], "/")[3],
-			Name:   p.Find("h5").Find("a").Text(),
-			Poster: p.Find("a").Find("div", "class", "anime__item__pic").Attrs()["data-setbg"],
-			State:  p.Find("div", "class", "anime__item__text").Find("ul").FindAll("li")[0].Text(),
-			Type:   strings.TrimSpace(p.Find("div", "class", "anime__item__text").Find("ul").FindAll("li")[1].Text()),
-			// Synopsis, Genre, Episodes are not populated here.
+	animes := make([]models.Anime, 0, len(thumbs))
+
+	for i, thumb := range thumbs {
+		if i >= len(bodies) {
+			break
 		}
-		animes = append(animes, anime)
+		a := thumb.Find("a")
+		img := thumb.Find("img")
+		info := bodies[i].Find("div", "class", "card-info").FindAll("p")
+
+		href := a.Attrs()["href"]
+		parts := strings.Split(strings.TrimRight(href, "/"), "/")
+		id := parts[len(parts)-1]
+
+		state := ""
+		typ := ""
+		if len(info) > 0 {
+			state = strings.TrimSpace(info[0].Text())
+		}
+		if len(info) > 1 {
+			typ = strings.TrimSpace(info[1].Text())
+		}
+
+		animes = append(animes, models.Anime{
+			ID:     id,
+			Name:   strings.TrimSpace(bodies[i].Find("h5").Find("a").Text()),
+			Poster: img.Attrs()["src"],
+			State:  state,
+			Type:   typ,
+		})
 	}
 
-	return animes, nil // Error will always be nil here if log.Fatal is used.
+	return animes, nil
 }

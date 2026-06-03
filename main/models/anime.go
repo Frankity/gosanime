@@ -33,3 +33,11 @@ type Slug struct {
 	Name   string  `json:"name"`   // The name or title of the category (e.g., "Top Animes", "Latest Episodes").
 	Animes []Anime `json:"animes"` // A list of Anime objects belonging to this category/slug.
 }
+
+type OvaItem struct {
+	Slug   string `json:"slug"`
+	Title  string `json:"title"`
+	Image  string `json:"image"`
+	Estado string `json:"estado"`
+	Tipo   string `json:"tipo"`
+}

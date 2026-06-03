@@ -2,10 +2,10 @@ package server
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"xyz.frankity/gosanime/main/config"
+	"xyz.frankity/gosanime/main/logger"
 	"xyz.frankity/gosanime/main/models"
 )
 
@@ -19,8 +19,7 @@ var bearer string
 // It initializes the package-level bearer token from the application configuration.
 // It returns a welcome message indicating the API version and status.
 func (a *Server) IndexHandler() http.HandlerFunc {
-	bearer = config.Config().Bearer // Initializes the global bearer token.
-	fmt.Println(bearer)             // Logs the bearer token, consider removing for production.
+	bearer = config.Config().Bearer
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		greet := config.Greet{
@@ -39,29 +38,28 @@ func (a *Server) IndexHandler() http.HandlerFunc {
 // Returns an HTTP 500 error if any of the data fetching operations fail.
 func (a *Server) GetMain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r) // Logs the request, consider removing or using a more structured logger.
 		if r.Header.Get("Authorization") != fmt.Sprintf("Bearer %v", bearer) {
 			SendResponse(w, r, config.GetNoBearer(), http.StatusUnauthorized)
 			return
 		}
 
-		animes, err := main() // Fetches latest animes
+		animes, err := main()
 		if err != nil {
-			log.Printf("cant get latest animes err=%v \n", err)
+			logger.L.Error("failed to fetch latest animes", "err", err)
 			SendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}
 
-		ovasResult, err := ovas() // Fetches OVAs
+		ovasResult, err := ovas()
 		if err != nil {
-			log.Printf("cant get latest ovas err=%v \n", err) // Corrected log message
+			logger.L.Error("failed to fetch ovas", "err", err)
 			SendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}
 
-		topAnimes, err := top() // Fetches top animes
+		topAnimes, err := top()
 		if err != nil {
-			log.Printf("cant get top animes err=%v \n", err) // Corrected log message
+			logger.L.Error("failed to fetch top animes", "err", err)
 			SendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}
@@ -106,9 +104,9 @@ func (a *Server) GetOvas() http.HandlerFunc {
 			SendResponse(w, r, config.GetNoBearer(), http.StatusUnauthorized)
 			return
 		}
-		ovasResult, err := ovas() // Fetches OVAs
+		ovasResult, err := ovas()
 		if err != nil {
-			log.Printf("cant get ovas err=%v \n", err) // Corrected log message
+			logger.L.Error("failed to fetch ovas", "err", err)
 			SendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}
@@ -164,7 +162,7 @@ func (a *Server) GetAnime() http.HandlerFunc {
 		// The `anime(r)` function is responsible for parsing parameters from `r` (e.g., anime ID).
 		animeResult, err := anime(r)
 		if err != nil {
-			log.Printf("cant get anime details err=%v \n", err) // Corrected log message
+			logger.L.Error("failed to fetch anime details", "err", err)
 			SendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}
@@ -191,9 +189,8 @@ func (a *Server) GetVideoServers() http.HandlerFunc {
 		}
 		// The `videosByServer(r)` function parses parameters from `r` (e.g., anime slug, episode number).
 		episodes, err := videosByServer(r)
-
 		if err != nil {
-			log.Printf("cant get video servers err=%v \n", err) // Corrected log message
+			logger.L.Error("failed to fetch video servers", "err", err)
 			SendResponse(w, r, nil, http.StatusInternalServerError)
 			return
 		}

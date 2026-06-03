@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://jkanime.net/buscar/naruto/1/\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"https://jkanime.net/buscar/naruto/2/\")",
+      "Bash(curl -s \"https://jkanime.net/buscar/naruto/2/\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"page 2 status: %{http_code}\\\\n\" \"https://jkanime.net/buscar/naruto/2/\")",
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(kill 218979)",
+      "Bash(go run *)",
+      "Bash(curl -s \"http://localhost:3000/\")",
+      "Bash(curl -s \"https://jkanime.net/tipo/ova\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{url_effective}\\\\n\" \"https://jkanime.net/tipo/ova\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{url_effective}\\\\n\" \"https://jkanime.net/tipo/ova/\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{url_effective}\\\\n\" \"https://jkanime.net/genero/ova/\")",
+      "Bash(curl -s \"https://jkanime.net/directorio?tipo=ovas\")",
+      "Bash(curl -s \"https://jkanime.net/top/\")",
+      "Bash(curl -s \"https://jkanime.net/naruto/\")",
+      "Bash(curl -s \"https://jkanime.net/ajax/capitulos/123/\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"https://jkanime.net/ajax/capitulos/123/\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"https://jkanime.net/ajax/capitulos/123\")",
+      "Bash(curl -s \"https://jkanime.net/ajax/episodes/123/1\" -H \"X-Requested-With: XMLHttpRequest\")",
+      "Bash(curl -s -X POST https://jkanime.net/ajax/episodes/123/1 -H 'X-Requested-With: XMLHttpRequest' -H 'Content-Type: application/json')"
+    ]
+  }
+}
