@@ -2,11 +2,9 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/anaskhan96/soup"
@@ -127,31 +125,17 @@ func searchAnime(r *http.Request) (interface{}, error) {
 		os.Exit(1)       // Consider returning an error.
 	}
 	animeQuery := r.Form.Get("anime") // The search term for anime.
-	page := r.Form.Get("page")        // The page number for search results.
 
-	url := fmt.Sprintf("%v/buscar/%s/%s/", config.Rooturl, strings.Replace(animeQuery, "-", "_", -1), page)
+	url := fmt.Sprintf("%v/buscar/%s/", config.Rooturl, strings.Replace(animeQuery, "-", "_", -1))
 
-	// DefaultClient is used here, consider consistency with utils.NewHTTPClient()
-	client := http.DefaultClient
+	client := utils.NewHTTPClient()
 
-	// The config.New round tripper might be for specific proxy or transport settings.
-	client.Transport, err = config.New(client.Transport)
+	res, err := client.R().Get(url)
 	if err != nil {
-		log.Fatal(err) // Consider returning error.
+		log.Fatal(err)
 	}
 
-	res, err := client.Get(url)
-	if err != nil {
-		log.Fatal(err) // Consider returning error.
-	}
-	defer res.Body.Close() // Ensure the response body is closed.
-
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err) // Consider returning error.
-	}
-
-	responseString := string(responseData)
+	responseString := res.String()
 
 	doc := soup.HTMLParse(responseString)
 
@@ -170,21 +154,7 @@ func searchAnime(r *http.Request) (interface{}, error) {
 		animes = append(animes, anime)
 	}
 
-	pg, err := strconv.Atoi(page)
-	if err != nil {
-		// Printing to stdout in a server handler is generally not recommended.
-		// Log this error or return it in the response.
-		print(fmt.Sprintf("%v %s", err, "<- Error"))
-		// If Atoi fails, pg will be 0, which might lead to incorrect page logic.
-	}
-
-	// Pagination logic: if 12 elements are found, assume there's a next page.
-	// Otherwise, set page to -1 to indicate no more pages.
-	if len(elements) == 12 {
-		pg = pg + 1
-	} else {
-		pg = -1
-	}
+	pg := -1
 
 	ar := models.SearchAnimeResponse{
 		Data:    animes,
@@ -193,5 +163,5 @@ func searchAnime(r *http.Request) (interface{}, error) {
 		Page:    pg,
 	}
 
-	return ar, err // err might be from strconv.Atoi if not handled, or nil.
+	return ar, err
 }
