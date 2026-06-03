@@ -3,9 +3,9 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
+	"xyz.frankity/gosanime/main/logger"
 	"xyz.frankity/gosanime/main/models"
 )
 
@@ -19,7 +19,7 @@ func SendResponse(w http.ResponseWriter, _ *http.Request, data interface{}, stat
 
 	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
-		log.Printf("Cannot format json. err=%v\n", err)
+		logger.L.Error("failed to encode response", "err", err)
 	}
 }
 

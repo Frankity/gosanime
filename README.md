@@ -146,6 +146,7 @@ Gosanime is a web scraper and API server built with Go. It fetches data from Jka
 *   **`main/models/`**: This directory holds the Go struct definitions that represent the data structures used throughout the application, such as API responses (`Anime`, `Server`, `ArrayResponse`, etc.).
 *   **`main/config/`**: This directory is intended for application configuration, such as base URLs for scraping or server settings.
 *   **`main/utils/`**: Contains utility functions, like the HTTP client wrapper (`http_utils.go`), used by various parts of the application.
+*   **`main/logger/`**: Initializes the structured logger (`log/slog`) and exposes a global `L` instance. Supports optional file output via the `-logfile` flag. A request-logging middleware in `server.go` uses this package to record every HTTP request.
 
 ### Data Flow
 
@@ -201,12 +202,42 @@ Here's how you can set up and run Gosanime on your local machine:
     go run main.go
     ```
 
+    To also write logs to a file, pass the `-logfile` flag:
+    ```bash
+    go run main.go -logfile
+    ```
+
 2.  **Access the API:**
     The server will start and listen on port **3000** by default (e.g., `http://localhost:3000`).
     You can access the API endpoints using a web browser (for GET requests), or tools like `curl`, Postman, or Insomnia.
 
     For example, to check if the API is running, open your browser and navigate to `http://localhost:3000/`.
     To explore other functionalities, refer to the **API Endpoints** section above for detailed information on each endpoint, including request parameters and response formats.
+
+## Logging
+
+Gosanime uses Go's standard `log/slog` package for structured logging. Every incoming request is logged with method, path, query string, response status, duration, and remote address.
+
+**Output format (text):**
+```
+time=2026-06-03T13:18:18.000-05:00 level=INFO msg=request method=GET path=/api/v1/search status=200 duration=497ms remote=[::1]:56292 query="anime=naruto&page=1"
+```
+
+### Flags
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `-logfile` | bool | `false` | Write logs to `logs/gosanime-YYYY-MM-DD.log` in addition to stdout |
+
+When `-logfile` is enabled, the `logs/` directory is created automatically and logs are appended to a file named after the current date. Multiple server runs on the same day append to the same file.
+
+```bash
+# stdout only
+go run main.go
+
+# stdout + logs/gosanime-2026-06-03.log
+go run main.go -logfile
+```
 
 ## Code Documentation (GoDoc)
 
